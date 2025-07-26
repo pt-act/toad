@@ -889,6 +889,7 @@ source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "gitpython" },
+    { name = "httpx" },
     { name = "llm" },
     { name = "textual", extra = ["syntax"] },
     { name = "textual-dev" },
@@ -900,6 +901,7 @@ dependencies = [
 requires-dist = [
     { name = "click", specifier = ">=8.2.1" },
     { name = "gitpython", specifier = ">=3.1.44" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "llm", specifier = ">=0.26" },
     { name = "textual", extras = ["syntax"], editable = "../textual" },
     { name = "textual-dev", specifier = ">=1.7.0" },

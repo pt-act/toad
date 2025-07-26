@@ -29,10 +29,6 @@ class Explain(containers.VerticalScroll):
     def on_mount(self) -> None:
         self.anchor()
 
-    # async def on_blur(self) -> None:
-    #     self.display = False
-    #     await self.content.update("")
-
     @work(thread=True)
     def send_prompt(self, prompt: str) -> None:
         """Get the response in a thread."""

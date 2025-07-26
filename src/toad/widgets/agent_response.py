@@ -19,23 +19,21 @@ class AgentResponse(Markdown):
         self.conversation = conversation
         super().__init__(markdown)
 
-    async def _add_chunk(self, chunk: str) -> None:
-        await self.append(chunk)
-        await asyncio.sleep(0.01)
-
     @work
     async def send_prompt(self, prompt: str) -> None:
         stream = Markdown.get_stream(self)
         try:
-            await self._send_prompt(prompt).wait()
+            await self._send_prompt(stream, prompt).wait()
         finally:
             await stream.stop()
 
     @work(thread=True)
-    def _send_prompt(self, prompt: str) -> None:
+    def _send_prompt(self, stream: MarkdownStream, prompt: str) -> None:
         """Get the response in a thread."""
         self.post_message(messages.WorkStarted())
-        llm_response = self.conversation.prompt(prompt, system=SYSTEM)
-        for chunk in llm_response:
-            self.app.call_from_thread(self._add_chunk, chunk)
-        self.post_message(messages.WorkFinished())
+        try:
+            llm_response = self.conversation.prompt(prompt, system=SYSTEM)
+            for chunk in llm_response:
+                self.app.call_from_thread(stream.write, chunk)
+        finally:
+            self.post_message(messages.WorkFinished())
