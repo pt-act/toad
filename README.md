@@ -13,7 +13,10 @@ I am working quite fast, and chances are I am aware of most of the issues.
 
 https://github.com/user-attachments/assets/502fbb70-b44e-416f-9daf-4e337cd75d5a
 
+## What is Toad?
 
+Toad is a universal interface to AI agents, which includes chat bots and agentic coding.
+Here's a tounge-in-check write up on my blog: https://willmcgugan.github.io/announcing-toad/
 
 ## Talk about Toad!
 
