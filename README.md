@@ -19,7 +19,7 @@ https://github.com/user-attachments/assets/502fbb70-b44e-416f-9daf-4e337cd75d5a
 
 Please **do** talk about Toad!
 Generating a buzz ahead of the first open release will be very benefitial.
-You may share your thoughts on social media, in addition to screenshots, and videos.
+You may share your thoughts on social media if you wish, in addition to screenshots, and videos (but obviously no code from this repository).
 But please only talk about features that have been implemented--I would like to keep some things under-wraps until the first public release.
 Understood that is a big vague.
 Feel free to ask if there is any doubt.
