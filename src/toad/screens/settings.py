@@ -112,6 +112,9 @@ class SettingsScreen(ModalScreen):
 
         yield Footer()
 
+    def on_mount(self) -> None:
+        self.query_one("#search").focus(scroll_visible=False)
+
     @on(Input.Blurred, "Input")
     def on_input_blurred(self, event: Input.Blurred) -> None:
         if event.validation_result and not event.validation_result.is_valid:

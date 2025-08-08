@@ -22,8 +22,8 @@ class ToadApp(App):
     CSS_PATH = "toad.tcss"
 
     _settings = var(dict)
-    column = reactive(False)
-    column_width = reactive(100)
+    column: reactive[bool] = reactive(False)
+    column_width: reactive[int] = reactive(100)
 
     def __init__(self) -> None:
         self.settings_changed_signal = Signal(self, "settings_changed")
@@ -67,15 +67,18 @@ class ToadApp(App):
 
     def setting_updated(self, key: str, value: object) -> None:
         if key == "ui.column":
-            self.column = value
+            if isinstance(value, bool):
+                self.column = value
         elif key == "ui.column-width":
-            self.column_width = value
+            if isinstance(value, int):
+                self.column_width = value
         elif key == "ui.theme":
-            self.theme = value
+            if isinstance(value, str):
+                self.theme = value
 
         self.settings_changed_signal.publish((key, value))
 
-    def on_ready(self) -> None:
+    def on_load(self) -> None:
         settings_path = self.settings_path
         if settings_path.exists():
             settings = json.loads(settings_path.read_text("utf-8"))
@@ -87,9 +90,6 @@ class ToadApp(App):
             self.notify(f"Wrote default settings to {settings_path}")
         self._settings = settings
         self.settings.set_all()
-
-    def on_mount(self) -> None:
-        self.theme = "dracula"
 
     def get_default_screen(self) -> Screen:
         return MainScreen().data_bind(

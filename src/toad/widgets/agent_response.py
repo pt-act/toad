@@ -11,6 +11,7 @@ from toad import messages
 SYSTEM = """\
 If asked to output code add inline documentation in the google style format, and always use type hinting where appropriate.
 Avoid using external libraries where possible, and favor code that writes output to the terminal.
+When asked for a table do not wrap it in a code fence.
 """
 
 

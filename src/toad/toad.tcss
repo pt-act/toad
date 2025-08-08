@@ -47,8 +47,7 @@ Conversation {
         margin-right: 1;
     }
 
-    #cursor-container {
-            
+    #cursor-container {            
         height: 1fr;
         width: 1;        
         visibility: hidden;
@@ -60,18 +59,15 @@ Conversation {
             &.-blink {
                 border-left: inner $text-accent 20%;
             } 
- 
         }
     }
         
     AgentResponse {
        padding: 0 2 0 1;       
     }
-
 }
 
 SettingsScreen {
-    
     Markdown {
         layout: stream;
     }
@@ -86,12 +82,10 @@ SettingsScreen {
         background: black 10%;                
     }
 
-
     .hidden {
         display: none;
     }
 
-    
     .setting:last-child .input {        
         margin: 1 0 0 0;        
     }
@@ -118,6 +112,7 @@ SettingsScreen {
         dock: top;
         padding: 1 0;
     }
+    
     .setting-group {
         padding: 0;    
         & > .setting-object:last-child {            
@@ -297,5 +292,13 @@ Footer {
         .footer-key--description {
             padding: 0 0 0 1;
         }
+    }
+}
+
+HelpPanel {    
+    padding-right: 0;
+    KeyPanel {
+        scrollbar-gutter: stable;
+        
     }
 }

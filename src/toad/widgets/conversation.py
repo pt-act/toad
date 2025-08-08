@@ -285,10 +285,6 @@ class Cursor(Static):
 class Contents(containers.VerticalGroup, can_focus=False):
     pass
 
-    # @on(events.Focus)
-    # def on_focus(self) -> None:
-    #     self.query_one(Cursor).visible = True
-
 
 class ContentsGrid(containers.Grid):
     def pre_layout(self, layout) -> None:
@@ -382,9 +378,6 @@ class Conversation(containers.Vertical):
         with self.window.prevent(events.DescendantFocus):
             self.window.focus(scroll_visible=False)
         event.menu.remove()
-        # self.watch_block_cursor(self.block_cursor)
-        # self.window.focus()
-        # self.cursor.visible = True
 
     def watch_busy_count(self, busy: int) -> None:
         self.throbber.set_class(busy > 0, "-busy")
@@ -397,7 +390,6 @@ class Conversation(containers.Vertical):
         key, value = setting_item
         if key == "llm.model":
             self.conversation = llm.get_model(value).conversation()
-            self.notify(f"Updated LLM model to {value!r}", title="llm.model")
 
     async def post_welcome(self) -> None:
         from toad.widgets.welcome import Welcome
@@ -414,11 +406,11 @@ class Conversation(containers.Vertical):
 
         await self.post(Markdown(notes_path.read_text(), classes="note"))
 
-        from toad.widgets.agent_response import AgentResponse
+        # from toad.widgets.agent_response import AgentResponse
 
-        agent_response = AgentResponse(self.conversation)
-        await self.post(agent_response)
-        agent_response.update(MD)
+        # agent_response = AgentResponse(self.conversation)
+        # await self.post(agent_response)
+        # agent_response.update(MD)
 
     def on_click(self, event: events.Click) -> None:
         if event.widget is not None:
@@ -489,6 +481,7 @@ class Conversation(containers.Vertical):
 
     def focus_prompt(self) -> None:
         self.block_cursor = -1
+        self.prompt.focus()
 
     async def action_select_block(self) -> None:
         block = self.blocks[self.block_cursor]
