@@ -9,6 +9,13 @@ Throbber {
     }   
 } 
 
+
+MarkdownTextArea {
+    & .text-area--cursor {
+        background: $text-error;
+    }
+}
+
 Conversation {
     height: 1fr;    
     background: black 10%;
@@ -48,7 +55,7 @@ Conversation {
     }
 
     #cursor-container {            
-        height: 1fr;
+        height: auto;
         width: 1;        
         visibility: hidden;
         &> Cursor {
@@ -181,7 +188,7 @@ Prompt {
     padding: 1 0 0 0;
     max-height: 50%;
     # background: $background;
-    TextArea {
+    MarkdownTextArea {
         height: auto;
         max-height: 1fr;
         &:blur {

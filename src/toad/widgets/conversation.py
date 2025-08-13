@@ -472,7 +472,8 @@ class Conversation(containers.Vertical):
             Static(
                 f"Settings read from [$text-success]'{self.app.settings_path}'",
                 classes="note",
-            )
+            ),
+            anchor=False,
         )
         notes_path = Path(__file__).parent / "../../../notes.md"
         from textual.widgets import Markdown
@@ -653,7 +654,7 @@ class Conversation(containers.Vertical):
     def watch_block_cursor(self, block_cursor: int) -> None:
         if block_cursor == -1:
             self.cursor.follow(None)
-            self.window.anchor()
+            # self.window.anchor()
             self.prompt.focus()
         else:
             self.window.focus()

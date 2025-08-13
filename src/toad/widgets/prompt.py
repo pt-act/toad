@@ -8,11 +8,12 @@ from textual import containers
 from textual import events
 
 
+from toad.widgets.markdown_textarea import MarkdownTextArea
 from toad.widgets.condensed_path import CondensedPath
 from toad.messages import UserInputSubmitted
 
 
-class MarkdownTextArea(TextArea):
+class PromptTextArea(MarkdownTextArea):
     BINDING_GROUP_TITLE = "Prompt"
     BINDINGS = [Binding("ctrl+j", "newline", "New line", key_display="⇧+enter")]
 
@@ -43,6 +44,6 @@ class Prompt(containers.VerticalGroup):
         self.query_one(MarkdownTextArea).insert(text)
 
     def compose(self) -> ComposeResult:
-        yield MarkdownTextArea()
+        yield PromptTextArea()
         with containers.HorizontalGroup():
             yield CondensedPath()
