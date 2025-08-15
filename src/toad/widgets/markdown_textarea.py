@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Sequence, TYPE_CHECKING
+from typing import Sequence
 
 from rich.text import Text
 
@@ -25,6 +25,7 @@ class MarkdownTextArea(TextArea):
         id: str | None = None,
         classes: str | None = None,
         disabled: bool = False,
+        placeholder: str | Content = "",
     ):
         super().__init__(
             text,
@@ -33,7 +34,9 @@ class MarkdownTextArea(TextArea):
             classes=classes,
             disabled=disabled,
             highlight_cursor_line=False,
+            placeholder=placeholder,
         )
+        self.compact = True
         self._highlight_lines: list[Content] | None = None
         self._text_cache: dict[int, Text] = {}
 

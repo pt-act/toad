@@ -180,24 +180,58 @@ Welcome {
 
 Prompt {
     
-    dock: bottom;
+    
     padding: 1 0 0 0;
     max-height: 50%;
     # background: $background;
-    MarkdownTextArea {
-        height: auto;
-        max-height: 1fr;
-        &:blur {
-            border: tall black 50%;
-            text-opacity: 0.5;
+    height: auto;
+    
+    &.-shell-mode {
+        #prompt-container:focus-within {
+            border: tall $primary;
         }
     }
-    CondensedPath {
-        margin: 1 1;
-        width: 1fr;
-        height: 1;
-        text-wrap: nowrap;
-        color: $text-warning;        
+
+    #prompt-container {
+        height: auto;
+        background: black 8%;
+        border: tall transparent;
+        border-subtitle-align: left;
+        border-subtitle-style: reverse;
+        
+        &:focus-within {
+            border: tall $secondary;
+            #prompt {
+                text-opacity: 100%;
+            }
+        }
+        
+        #prompt {
+            padding: 0 1;
+            text-opacity: 30%;
+        }
+        
+        PromptTextArea {
+            padding: 0 1 0 0;
+            background: transparent;
+            border: none;
+            height: auto;
+            max-height: 1fr;
+            &:blur {
+                text-opacity: 0.5;
+            }
+        }
+    }
+    
+    #info-container {        
+        height: auto;
+        CondensedPath {            
+            margin: 1 1;
+            width: 1fr;
+            height: 1;
+            text-wrap: nowrap;
+            color: $text-warning;        
+        }
     }
 }
 
@@ -206,15 +240,11 @@ AutoCompleteOptions {
     padding: 0;
     width: auto;
     overlay: screen;
-        
-    constrain: inside inflect;
-    # layer: float;
-    # position: absolute;
-    # height: auto;
+    overflow: hidden;
+    constrain: inside inflect;    
     min-width: 12;    
     margin: 1 0;
-    height: auto;
-        
+    height: auto;        
     & > .option-list--option {
         padding: 0 1;
     }

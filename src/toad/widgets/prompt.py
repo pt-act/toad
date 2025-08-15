@@ -7,11 +7,13 @@ from textual.app import ComposeResult
 
 from textual.actions import SkipAction
 from textual.binding import Binding
-from textual.geometry import Offset
+
+from textual.content import Content
 from textual import getters
 from textual.message import Message
-from textual.widgets import OptionList, TextArea
+from textual.widgets import OptionList, TextArea, Static, Label
 from textual import containers
+from textual.widget import Widget
 from textual.widgets.option_list import Option
 from textual import events
 
@@ -36,6 +38,9 @@ class PromptTextArea(MarkdownTextArea):
         def __init__(self, markdown: str) -> None:
             self.markdown = markdown
             super().__init__()
+
+    class CancelShell(Message):
+        pass
 
     def on_mount(self) -> None:
         self.highlight_cursor_line = False
@@ -62,13 +67,28 @@ class PromptTextArea(MarkdownTextArea):
         else:
             super().action_cursor_down(select)
 
+    def action_delete_left(self) -> None:
+        selection = self.selection
+        if selection.start == selection.end and self.selection.end == (0, 0):
+            self.post_message(self.CancelShell())
+            return
+        return super().action_delete_left()
+
 
 class Prompt(containers.VerticalGroup):
+    PROMPT_NULL = " "
+    PROMPT_SHELL = Content.styled("$", "$text-primary")
+    PROMPT_AI = Content.styled("❯", "$text-secondary")
+    PROMPT_MULTILINE = Content.styled("☰", "$text-secondary")
+
     BINDINGS = [Binding("escape", "dismiss", "Dismiss", show=False)]
+    prompt_container = getters.query_one("#prompt-container", Widget)
     prompt_text_area = getters.query_one(PromptTextArea)
+    prompt_label = getters.query_one("#prompt", Label)
 
     auto_completes: var[list[Option]] = var(list)
     slash_commands: var[list[SlashCommand]] = var(list)
+    shell_mode = var(False)
 
     @dataclass
     class AutoCompleteMove(Message):
@@ -91,6 +111,44 @@ class Prompt(containers.VerticalGroup):
     def text(self) -> str:
         return self.prompt_text_area.text
 
+    def watch_shell_mode(self) -> None:
+        self.update_prompt()
+
+    def update_prompt(self):
+        if self.is_shell_mode:
+            self.prompt_label.update(self.PROMPT_SHELL)
+            self.add_class("-shell-mode")
+            self.prompt_text_area.placeholder = Content.assemble(
+                "Enter shell command".expandtabs(8),
+            )
+        else:
+            self.prompt_label.update(
+                self.PROMPT_SHELL if self.likely_shell else self.PROMPT_AI
+            )
+            self.remove_class("-shell-mode")
+            self.prompt_text_area.placeholder = Content.assemble(
+                "What would you like to do?\t".expandtabs(8),
+                ("!", "r"),
+                " shell ",
+                ("/", "r"),
+                " commands ",
+                ("@", "r"),
+                " files",
+            )
+
+    @property
+    def likely_shell(self) -> bool:
+        text = self.prompt_text_area.text
+        if "\n" in text:
+            return False
+        if text.split(" ", 1)[0] in ("ls", "cat", "cd", "mv", "cp"):
+            return True
+        return False
+
+    @property
+    def is_shell_mode(self) -> bool:
+        return self.shell_mode or self.likely_shell
+
     def focus(self) -> None:
         self.query(MarkdownTextArea).focus()
 
@@ -112,21 +170,22 @@ class Prompt(containers.VerticalGroup):
     def show_auto_complete(self, show: bool) -> None:
         if self.auto_complete.display == show:
             return
-        if show:
-            self.update_auto_complete_location()
+
         # cursor_offset = self.prompt_text_area.cursor_screen_offset + (-2, 1)
         # self.auto_complete.styles.offset = cursor_offset
         self.auto_complete.display = show
         if not show:
+            self.prompt_text_area.suggestion = ""
             return
+        self.update_auto_complete_location()
         cursor_row, cursor_column = self.prompt_text_area.selection.end
         line = self.prompt_text_area.document.get_line(cursor_row)
         post_cursor = line[cursor_column:]
         pre_cursor = line[:cursor_column]
         self.load_suggestions(pre_cursor, post_cursor)
 
-    def on_mount(self, event: events.Mount) -> None:
-        self.call_after_refresh(self.update_auto_complete_location)
+    # def on_mount(self, event: events.Mount) -> None:
+    #     self.call_after_refresh(self.update_auto_complete_location)
 
     @on(MarkdownTextArea.CursorMove)
     def on_cursor_move(self, event: MarkdownTextArea.CursorMove) -> None:
@@ -135,6 +194,7 @@ class Prompt(containers.VerticalGroup):
             self.show_auto_complete(False)
             return
 
+        self.update_auto_complete_location()
         self.show_auto_complete(
             self.prompt_text_area.cursor_at_end_of_line or not self.text
         )
@@ -146,6 +206,15 @@ class Prompt(containers.VerticalGroup):
 
     @on(TextArea.Changed)
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        text = event.text_area.text
+
+        if text.startswith(("!", "$")) and not self.shell_mode:
+            self.shell_mode = True
+            event.text_area.load_text(text[1:])
+            self.update_prompt()
+            return
+
+        self.update_prompt()
         cursor_row, cursor_column = self.prompt_text_area.selection.end
         line = self.prompt_text_area.document.get_line(cursor_row)
         post_cursor = line[cursor_column:]
@@ -159,6 +228,10 @@ class Prompt(containers.VerticalGroup):
                 self.auto_complete.action_cursor_up()
             else:
                 self.auto_complete.action_cursor_down()
+
+    @on(PromptTextArea.CancelShell)
+    def on_cancel_shell(self, event: PromptTextArea.CancelShell):
+        self.shell_mode = False
 
     def suggest(self, suggestion: str) -> None:
         if suggestion.startswith(self.text) and self.text != suggestion:
@@ -184,16 +257,17 @@ class Prompt(containers.VerticalGroup):
             + 1
         )
 
-        for slash_command in self.slash_commands:
-            if str(slash_command).startswith(pre_cursor) and pre_cursor != str(
-                slash_command
-            ):
-                suggestions.append(
-                    Option(
-                        slash_command.content.expand_tabs(command_length),
-                        id=slash_command.command,
+        if not self.is_shell_mode:
+            for slash_command in self.slash_commands:
+                if str(slash_command).startswith(pre_cursor) and pre_cursor != str(
+                    slash_command
+                ):
+                    suggestions.append(
+                        Option(
+                            slash_command.content.expand_tabs(command_length),
+                            id=slash_command.command,
+                        )
                     )
-                )
 
         self.set_auto_completes(suggestions)
 
@@ -206,12 +280,16 @@ class Prompt(containers.VerticalGroup):
         self.auto_complete.visible = True
 
     def compose(self) -> ComposeResult:
-        yield PromptTextArea().data_bind(Prompt.auto_completes)
-        with containers.HorizontalGroup():
+        with containers.HorizontalGroup(id="prompt-container"):
+            yield Label(self.PROMPT_AI, id="prompt")
+            yield PromptTextArea().data_bind(Prompt.auto_completes)
+        with containers.HorizontalGroup(id="info-container"):
             yield CondensedPath()
 
     def action_dismiss(self) -> None:
-        if self.auto_complete.display:
+        if self.shell_mode:
+            self.shell_mode = False
+        elif self.auto_complete.display:
             self.show_auto_complete(False)
         else:
             raise SkipAction()
