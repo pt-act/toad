@@ -17,7 +17,7 @@ from textual.binding import Binding
 from textual.widget import Widget
 from textual.widgets import Static
 from textual.widgets._markdown import MarkdownBlock, MarkdownFence
-from textual.geometry import Offset
+from textual.geometry import Offset, clamp
 from textual.reactive import var
 from textual.css.query import NoMatches
 from textual.layouts.grid import GridLayout
@@ -33,6 +33,7 @@ from toad.widgets.user_input import UserInput
 from toad.widgets.explain import Explain
 from toad.widgets.run_output import RunOutput
 from toad.slash_command import SlashCommand
+from toad.block_protocol import BlockProtocol
 
 from toad.menus import CONVERSATION_MENUS
 
@@ -382,7 +383,7 @@ class Conversation(containers.Vertical):
     ]
 
     busy_count = var(0)
-    block_cursor = var(-1, init=False)
+    cursor_offset = var(-1, init=False)
     _blocks: var[list[MarkdownBlock] | None] = var(None)
 
     throbber: getters.query_one[Throbber] = getters.query_one("#throbber")
@@ -408,12 +409,22 @@ class Conversation(containers.Vertical):
         return llm.get_model(self.app.settings.get("llm.model", str)).conversation()
 
     @property
-    def cursor_block(self) -> MarkdownBlock | None:
+    def cursor_block(self) -> Widget | None:
         """The block next to the cursor, or `None` if no block cursor."""
-        blocks = self.blocks
-        if self.block_cursor < 0 or self.block_cursor >= len(blocks):
+        if self.cursor_offset == -1 or not self.contents.children:
             return None
-        return blocks[self.block_cursor]
+        try:
+            block_widget = self.contents.children[self.cursor_offset]
+        except IndexError:
+            return None
+        return block_widget
+
+    @property
+    def cursor_block_child(self) -> Widget | None:
+        if (cursor_block := self.cursor_block) is not None:
+            if isinstance(cursor_block, BlockProtocol):
+                return cursor_block.get_cursor_block()
+        return cursor_block
 
     @on(messages.WorkStarted)
     def on_work_started(self) -> None:
@@ -439,7 +450,7 @@ class Conversation(containers.Vertical):
     @on(events.DescendantFocus)
     def on_descendant_focus(self, event: events.DescendantFocus):
         if isinstance(event.widget, HighlightedTextArea):
-            self.block_cursor = -1
+            self.cursor_offset = -1
 
     @on(events.DescendantBlur)
     def on_descendant_blur(self, event: events.DescendantBlur):
@@ -490,7 +501,7 @@ class Conversation(containers.Vertical):
     async def post_welcome(self) -> None:
         from toad.widgets.welcome import Welcome
 
-        await self.post(Welcome(classes="note"), anchor=False)
+        await self.post(Welcome(classes="note", name="welcome"), anchor=False)
         await self.post(
             Static(
                 f"Settings read from [$text-success]'{self.app.settings_path}'",
@@ -501,13 +512,15 @@ class Conversation(containers.Vertical):
         notes_path = Path(__file__).parent / "../../../notes.md"
         from textual.widgets import Markdown
 
-        await self.post(Markdown(notes_path.read_text(), classes="note"))
+        await self.post(
+            Markdown(notes_path.read_text(), name="read_text", classes="note")
+        )
 
-        # from toad.widgets.agent_response import AgentResponse
+        from toad.widgets.agent_response import AgentResponse
 
-        # agent_response = AgentResponse(self.conversation)
-        # await self.post(agent_response)
-        # agent_response.update(MD)
+        agent_response = AgentResponse(self.conversation)
+        await self.post(agent_response)
+        agent_response.update(MD)
 
     def on_click(self, event: events.Click) -> None:
         if event.widget is not None:
@@ -525,13 +538,11 @@ class Conversation(containers.Vertical):
             else:
                 with suppress(ValueError):
                     clicked_block_index = self.blocks.index(markdown_block)
-                    if self.block_cursor == clicked_block_index:
+                    if self.cursor_offset == clicked_block_index:
                         pass
                         # await self.action_select_block()
                     else:
-                        self.block_cursor = clicked_block_index
-
-        # self.notify(str(event.widget))
+                        self.cursor_offset = clicked_block_index
 
     async def post(self, widget: Widget, anchor: bool = True) -> None:
         self._blocks = None
@@ -539,49 +550,88 @@ class Conversation(containers.Vertical):
         if anchor:
             self.window.anchor()
 
-    @property
-    def blocks(self) -> list[MarkdownBlock]:
-        from toad.widgets.agent_response import AgentResponse
-
-        if self._blocks is None or self.busy_count:
-            self._blocks = [
-                block
-                for response in self.contents.query_children(AgentResponse)
-                for block in response.query_children(MarkdownBlock)
-            ]
-        return self._blocks
-
     def action_cursor_up(self) -> None:
-        blocks = self.blocks
-        if blocks:
-            if self.block_cursor == 0:
-                pass
-            elif self.block_cursor == -1:
-                self.block_cursor = len(blocks) - 1
+        if not self.contents.children or self.cursor_offset == 0:
+            # No children
+            return
+        if self.cursor_offset == -1:
+            # Start cursor at end
+            self.cursor_offset = len(self.contents.children) - 1
+            cursor_block = self.cursor_block
+            if isinstance(cursor_block, BlockProtocol):
+                cursor_block.block_cursor_clear()
+                cursor_block.block_cursor_up()
+        else:
+            cursor_block = self.cursor_block
+            if isinstance(cursor_block, BlockProtocol):
+                if cursor_block.block_cursor_up() is None:
+                    self.cursor_offset -= 1
+                    cursor_block = self.cursor_block
+                    if isinstance(cursor_block, BlockProtocol):
+                        cursor_block.block_cursor_clear()
+                        cursor_block.block_cursor_up()
             else:
-                self.block_cursor -= 1
+                # Move cursor up
+                self.cursor_offset -= 1
+                cursor_block = self.cursor_block
+                if isinstance(cursor_block, BlockProtocol):
+                    cursor_block.block_cursor_clear()
+                    cursor_block.block_cursor_up()
+        self.refresh_block_cursor()
 
     def action_cursor_down(self) -> None:
-        blocks = self.blocks
-        if not blocks:
+        if not self.contents.children or self.cursor_offset == -1:
+            # No children, or no cursor
             return
-        if self.block_cursor == -1:
-            return
+
+        cursor_block = self.cursor_block
+        if isinstance(cursor_block, BlockProtocol):
+            if cursor_block.block_cursor_down() is None:
+                self.cursor_offset += 1
+                if self.cursor_offset >= len(self.contents.children):
+                    self.cursor_offset = -1
+                    self.refresh_block_cursor()
+                    return
+                cursor_block = self.cursor_block
+                if isinstance(cursor_block, BlockProtocol):
+                    cursor_block.block_cursor_clear()
+                    cursor_block.block_cursor_down()
         else:
-            if self.block_cursor < len(blocks) - 1:
-                self.block_cursor += 1
-            else:
-                self.block_cursor = -1
+            self.cursor_offset += 1
+            if self.cursor_offset >= len(self.contents.children):
+                self.cursor_offset = -1
+                self.refresh_block_cursor()
+                return
+            cursor_block = self.cursor_block
+            if isinstance(cursor_block, BlockProtocol):
+                cursor_block.block_cursor_clear()
+                cursor_block.block_cursor_down()
+        self.refresh_block_cursor()
+
+        # cursor_block = self.cursor_block
+        # self.log(cursor_block)
+        # if isinstance(cursor_block, BlockProtocol):
+        #     print("down")
+        #     if cursor_block.block_cursor_down() is not None:
+        #         self.refresh_block_cursor()
+        #         return
+
+        # if self.cursor_offset >= len(self.contents.children) - 1:
+        #     self.cursor_offset = -1
+        # else:
+        #     self.cursor_offset += 1
 
     def action_dismiss(self) -> None:
-        self.block_cursor = -1
+        self.cursor_offset = -1
 
     def focus_prompt(self) -> None:
-        self.block_cursor = -1
+        self.cursor_offset = -1
         self.prompt.focus()
 
     async def action_select_block(self) -> None:
-        block = self.blocks[self.block_cursor]
+        if (block := self.cursor_block_child) is None:
+            return
+
         if block.name is None:
             self.app.bell()
             return
@@ -616,7 +666,7 @@ class Conversation(containers.Vertical):
 
     def action_copy_to_prompt(self) -> None:
         if (block := self.cursor_block) is not None and block.source:
-            self.block_cursor = -1
+            self.cursor_offset = -1
             self.prompt.append(block.source)
 
     def action_explain(self, topic: str | None = None) -> None:
@@ -674,15 +724,63 @@ class Conversation(containers.Vertical):
             run_output.write(decode(data))
         run_output.write(decode(data, final=True))
 
-    def watch_block_cursor(self, block_cursor: int) -> None:
-        if block_cursor == -1:
-            self.cursor.follow(None)
-            # self.window.anchor()
-            self.prompt.focus()
-        else:
+    def refresh_block_cursor(self) -> None:
+        if (cursor_block := self.cursor_block_child) is not None:
             self.window.focus()
             self.cursor.visible = True
-            blocks = self.blocks
-            block = blocks[block_cursor]
-            self.cursor.follow(block)
-            self.window.scroll_to_center(block)
+            self.cursor.follow(cursor_block)
+            self.window.scroll_to_center(cursor_block)
+        else:
+            self.cursor.visible = False
+            self.cursor.follow(None)
+            self.prompt.focus()
+
+    # def watch_cursor_offset(
+    #     self, previous_block_cursor: int, block_cursor: int
+    # ) -> None:
+    #     if block_cursor == -1 and previous_block_cursor != -1:
+    #         try:
+    #             block = self.contents.children[previous_block_cursor]
+    #         except IndexError:
+    #             pass
+    #         else:
+    #             if isinstance(block, BlockProtocol):
+    #                 if block is not self.cursor_block_child:
+    #                     block.block_cursor_clear()
+
+    #     if block_cursor != -1:
+    #         try:
+    #             block = self.contents.children[block_cursor]
+    #         except IndexError:
+    #             pass
+    #         else:
+    #             if isinstance(block, BlockProtocol):
+    #                 if (
+    #                     block_cursor > previous_block_cursor
+    #                     and previous_block_cursor != -1
+    #                 ):
+    #                     block.block_cursor_down()
+    #                 else:
+    #                     block.block_cursor_up()
+
+    # if previous_block_cursor != -1:
+    #     try:
+    #         block = self.contents.children[previous_block_cursor]
+    #     except IndexError:
+    #         pass
+    #     else:
+    #         if (
+    #             hasattr(block, "block_cursor_clear")
+    #             and block is not self.cursor_block
+    #         ):
+    #             block.block_cursor_clear()
+    # if block_cursor == -1:
+    #     self.cursor.follow(None)
+    #     # self.window.anchor()
+    #     self.prompt.focus()
+    # else:
+    #     self.window.focus()
+    #     self.cursor.visible = True
+    #     if (block := self.cursor_block_child) is not None:
+    #         self.cursor.follow(block)
+    #         self.window.scroll_to_center(block)

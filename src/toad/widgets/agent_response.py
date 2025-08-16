@@ -4,6 +4,7 @@ from llm import Model, Conversation
 
 from textual.reactive import var
 from textual import work
+from textual.widget import Widget
 from textual.widgets import Markdown
 from textual.widgets.markdown import MarkdownStream
 from toad import messages
@@ -16,9 +17,54 @@ When asked for a table do not wrap it in a code fence.
 
 
 class AgentResponse(Markdown):
+    block_cursor_offset = var(-1)
+
     def __init__(self, conversation: Conversation, markdown: str | None = None) -> None:
         self.conversation = conversation
         super().__init__(markdown)
+
+    def block_cursor_clear(self) -> None:
+        self.block_cursor_offset = -1
+
+    def block_cursor_up(self) -> Widget | None:
+        self.log(self, self.children, self.block_cursor_offset)
+        if self.block_cursor_offset == -1:
+            if self.children:
+                self.block_cursor_offset = len(self.children) - 1
+            else:
+                return None
+        else:
+            self.block_cursor_offset -= 1
+
+        if self.block_cursor_offset == -1:
+            return None
+        try:
+            return self.children[self.block_cursor_offset]
+        except IndexError:
+            self.block_cursor_offset = -1
+            return None
+
+    def block_cursor_down(self) -> Widget | None:
+        if self.block_cursor_offset == -1:
+            if self.children:
+                self.block_cursor_offset = 0
+            else:
+                return None
+        else:
+            self.block_cursor_offset += 1
+        if self.block_cursor_offset >= len(self.children):
+            self.block_cursor_offset = -1
+            return None
+        try:
+            return self.children[self.block_cursor_offset]
+        except IndexError:
+            self.block_cursor_offset = -1
+            return None
+
+    def get_cursor_block(self) -> Widget | None:
+        if self.block_cursor_offset == -1:
+            return None
+        return self.children[self.block_cursor_offset]
 
     @work
     async def send_prompt(self, prompt: str) -> None:
