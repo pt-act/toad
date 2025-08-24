@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import codecs
+
 from functools import cached_property
-import os
 from typing import TYPE_CHECKING
-import asyncio
-from contextlib import suppress
 from pathlib import Path
 
 from textual import on, work
@@ -17,11 +14,10 @@ from textual.binding import Binding
 from textual.widget import Widget
 from textual.widgets import Static
 from textual.widgets._markdown import MarkdownBlock, MarkdownFence
-from textual.geometry import Offset, clamp
+from textual.geometry import Offset
 from textual.reactive import var, Initialize
-from textual.css.query import NoMatches
 from textual.layouts.grid import GridLayout
-from textual.widgets import OptionList
+
 
 import llm
 
@@ -31,7 +27,6 @@ from toad.widgets.prompt import HighlightedTextArea, Prompt, AutoCompleteOptions
 from toad.widgets.throbber import Throbber
 from toad.widgets.user_input import UserInput
 from toad.widgets.explain import Explain
-from toad.widgets.run_output import RunOutput
 from toad.shell import Shell, CurrentWorkingDirectoryChanged
 from toad.slash_command import SlashCommand
 from toad.block_protocol import BlockProtocol

@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from rich.cells import cell_len
 
+from pathlib import Path
+
 from textual import on, work
 from textual.reactive import var
 from textual.app import ComposeResult
@@ -11,7 +13,7 @@ from textual.binding import Binding
 from textual.content import Content
 from textual import getters
 from textual.message import Message
-from textual.widgets import OptionList, TextArea, Static, Label
+from textual.widgets import OptionList, TextArea, Label
 from textual import containers
 from textual.widget import Widget
 from textual.widgets.option_list import Option
@@ -20,6 +22,7 @@ from textual import events
 
 from toad.widgets.highlighted_textarea import HighlightedTextArea
 from toad.widgets.condensed_path import CondensedPath
+from toad.widgets.path_search import PathSearch
 from toad.messages import UserInputSubmitted
 from toad.slash_command import SlashCommand
 
@@ -102,6 +105,7 @@ class Prompt(containers.VerticalGroup):
     prompt_text_area = getters.query_one(PromptTextArea)
     prompt_label = getters.query_one("#prompt", Label)
     current_directory = getters.query_one(CondensedPath)
+    path_search = getters.query_one(PathSearch)
 
     auto_completes: var[list[Option]] = var(list)
     slash_commands: var[list[SlashCommand]] = var(list)
@@ -223,8 +227,8 @@ class Prompt(containers.VerticalGroup):
         pre_cursor = line[:cursor_column]
         self.load_suggestions(pre_cursor, post_cursor)
 
-    # def on_mount(self, event: events.Mount) -> None:
-    #     self.call_after_refresh(self.update_auto_complete_location)
+    def on_mount(self, event: events.Mount) -> None:
+        self.call_after_refresh(self.path_search.load_paths, Path("./"))
 
     @on(HighlightedTextArea.CursorMove)
     def on_cursor_move(self, event: HighlightedTextArea.CursorMove) -> None:
@@ -330,6 +334,7 @@ class Prompt(containers.VerticalGroup):
             yield PromptTextArea().data_bind(
                 Prompt.auto_completes, Prompt.multi_line, Prompt.shell_mode
             )
+        yield PathSearch()
         with containers.HorizontalGroup(id="info-container"):
             yield CondensedPath()
 

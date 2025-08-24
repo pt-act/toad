@@ -307,6 +307,17 @@ Prompt {
             color: $text-warning;        
         }
     }
+
+    PathSearch {
+        border: none;
+        max-height: 10;           
+        padding: 1 0;
+        margin: 0 1;                     
+        overflow: hidden;
+        & > .option-list--option {
+            padding: 0 1;            
+        }
+    }
 }
 
 AutoCompleteOptions {
@@ -325,9 +336,6 @@ AutoCompleteOptions {
         padding: 0 1;
     }
 }
-
-
-
 
 
 MainScreen {

@@ -537,7 +537,6 @@ class ANSIStream:
         ]
         style = NULL_STYLE
         while codes:
-            # code, *codes = codes
             match codes:
                 case [38, 2, red, green, blue, *codes]:
                     # Foreground RGB
