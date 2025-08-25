@@ -16,6 +16,7 @@ class ScanJob:
 
     def __init__(
         self,
+        name: str,
         queue: asyncio.Queue[Path],
         results: list[Path],
         exclude_dirs: Sequence[str],
@@ -25,6 +26,7 @@ class ScanJob:
         self.results = results
         self.exclude_dirs = exclude_dirs
         self.exclude_files = exclude_files
+        self.name = name
 
     def start(self) -> None:
         self._task = asyncio.create_task(self.run())
@@ -33,7 +35,10 @@ class ScanJob:
         queue = self.queue
         results = self.results
         while True:
-            scan_path = await queue.get()
+            try:
+                scan_path = await queue.get()
+            except asyncio.QueueShutDown:
+                break
             paths = await to_thread(self._scan, scan_path)
             for path in paths:
                 if path.is_file():
@@ -49,7 +54,7 @@ class ScanJob:
                         if fnmatch.fnmatch(str_path, exclude):
                             break
                     else:
-                        results.append(path)
+                        # results.append(path)
                         await queue.put(path)
             queue.task_done()
 
@@ -78,17 +83,22 @@ async def scan(
     results: list[Path] = []
     jobs = [
         ScanJob(
+            f"scan-job #{index}",
             queue,
             results,
             exclude_dirs=exclude_dirs or [],
             exclude_files=exclude_files or [],
         )
-        for _ in range(max_simultaneous)
+        for index in range(max_simultaneous)
     ]
-    await queue.put(root)
-    for job in jobs:
-        job.start()
-    await queue.join()
+    try:
+        await queue.put(root)
+        for job in jobs:
+            job.start()
+        await queue.join()
+    except asyncio.CancelledError:
+        await queue.join()
+
     return results
 
 
@@ -164,14 +174,39 @@ class DirectoryScanner:
 
 
 if __name__ == "__main__":
-    from rich import print
+    # from rich import print
+
+    from textual.fuzzy import Matcher
+
+    import contextlib
+    from time import perf_counter
+    from typing import Generator
+
+    @contextlib.contextmanager
+    def timer(subject: str = "time") -> Generator[None, None, None]:
+        """print the elapsed time. (only used in debugging)"""
+        start = perf_counter()
+        yield
+        elapsed = perf_counter() - start
+        elapsed_ms = elapsed * 1000
+        print(f"{subject} elapsed {elapsed_ms:.4f}ms")
 
     async def run_scan():
-        print(
-            await scan(
-                Path("./"),
-                exclude_dirs=[".*", "__pycache__"],
-            )
+        paths = await scan(
+            Path("./"),
+            # exclude_dirs=[".*", "__pycache__"],
         )
+        str_paths = [str(path) for path in paths]
+        matcher = Matcher("psputils")
+        results = []
+
+        with timer("fuzzy"):
+            for path in str_paths:
+                score = matcher.match(path)
+                if score > 0:
+                    print(path)
+                results.append((score, path))
+
+        # print(results)
 
     asyncio.run(run_scan())

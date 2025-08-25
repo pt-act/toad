@@ -23,7 +23,7 @@ import llm
 
 from toad import messages
 from toad.widgets.menu import Menu
-from toad.widgets.prompt import HighlightedTextArea, Prompt, AutoCompleteOptions
+from toad.widgets.prompt import HighlightedTextArea, Prompt
 from toad.widgets.throbber import Throbber
 from toad.widgets.user_input import UserInput
 from toad.widgets.explain import Explain
@@ -371,9 +371,21 @@ class Window(containers.VerticalScroll):
 
 class Conversation(containers.Vertical):
     BINDING_GROUP_TITLE = "Conversation"
+    CURSOR_BINDING_GROUP = Binding.Group(description="Block cursor")
     BINDINGS = [
-        Binding("alt+up", "cursor_up", "Block up", priority=True),
-        Binding("alt+down", "cursor_down", "Block down"),
+        Binding(
+            "alt+up",
+            "cursor_up",
+            "Block up",
+            priority=True,
+            group=CURSOR_BINDING_GROUP,
+        ),
+        Binding(
+            "alt+down",
+            "cursor_down",
+            "Block down",
+            group=CURSOR_BINDING_GROUP,
+        ),
         Binding("enter", "select_block", "Select"),
         Binding("escape", "dismiss", "Dismiss", show=False),
         Binding("f2,ctrl+comma", "settings", "Settings"),

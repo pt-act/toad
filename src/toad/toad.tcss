@@ -1,3 +1,6 @@
+LoadingIndicator {
+    background: transparent;
+}
 
 Throbber {
     width: 100%;
@@ -23,6 +26,7 @@ Conversation {
         margin-right: 1;        
         # scrollbar-gutter: stable;
         scrollbar-size-vertical: 2;
+        height: 1fr;
     }
 
     &.-scrollbar-thin {
@@ -256,13 +260,44 @@ Prompt {
     
     
     padding: 1 0 0 0;
-    max-height: 50%;
+    # max-height: 50%;
     # background: $background;
     height: auto;
-    
+
+   
     &.-shell-mode {
         #prompt-container:focus-within {
             border: tall $primary;
+        }
+    }
+
+    PathSearch {
+        height: auto;
+        Input {
+            margin: 0 1;
+            padding: 0 1;
+        }
+        OptionList {
+            border: none;
+            height: 10;           
+            padding: 0;
+            margin: 0 1;                     
+            overflow: hidden;
+            & > .option-list--option {
+                padding: 0 1;            
+            }
+        }
+    }
+
+    # PathSearch {        
+    #     height: auto;
+    #     OptionList {
+    #         height: 10;
+    #     }        
+    # }
+    &.-show-path-search {
+        PathSearch {
+            display: block
         }
     }
 
@@ -290,7 +325,8 @@ Prompt {
             background: transparent;
             border: none;
             height: auto;
-            max-height: 1fr;
+            max-height: 50vh;
+
             &:blur {
                 text-opacity: 0.5;
             }
@@ -308,16 +344,7 @@ Prompt {
         }
     }
 
-    PathSearch {
-        border: none;
-        max-height: 10;           
-        padding: 1 0;
-        margin: 0 1;                     
-        overflow: hidden;
-        & > .option-list--option {
-            padding: 0 1;            
-        }
-    }
+
 }
 
 AutoCompleteOptions {
@@ -417,6 +444,10 @@ Footer {
         .footer-key--description {
             padding: 0 0 0 1;
         }
+    }
+    FooterLabel {
+        color: $text-muted;
+        background: $footer-description-background;
     }
 }
 

@@ -44,6 +44,7 @@ class Shell:
         self.height = 24
 
     async def send(self, command: str, width: int, height: int) -> None:
+        height = max(height, 1)
         self.width = width
         self.height = height
         resize_pty(self.master, width, height)

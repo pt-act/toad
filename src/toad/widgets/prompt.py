@@ -111,6 +111,7 @@ class Prompt(containers.VerticalGroup):
     slash_commands: var[list[SlashCommand]] = var(list)
     shell_mode = var(False)
     multi_line = var(False)
+    show_path_search = var(True, toggle_class="-show-path-search")
 
     @dataclass
     class AutoCompleteMove(Message):
@@ -143,9 +144,9 @@ class Prompt(containers.VerticalGroup):
         if self.shell_mode:
             self.prompt_label.update(self.PROMPT_SHELL, layout=False)
             self.add_class("-shell-mode")
-            self.prompt_text_area.placeholder = Content.assemble(
-                "Enter shell command".expandtabs(8),
-            )
+            self.prompt_text_area.placeholder = Content.from_markup(
+                "Enter shell command\t[r] esc [/r] prompt mode"
+            ).expand_tabs(8)
             self.prompt_text_area.highlight_language = "shell"
         else:
             self.prompt_label.update(
@@ -214,13 +215,11 @@ class Prompt(containers.VerticalGroup):
         if self.auto_complete.display == show:
             return
 
-        # cursor_offset = self.prompt_text_area.cursor_screen_offset + (-2, 1)
-        # self.auto_complete.styles.offset = cursor_offset
         self.auto_complete.display = show
         if not show:
             self.prompt_text_area.suggestion = ""
             return
-        # self.update_auto_complete_location()
+
         cursor_row, cursor_column = self.prompt_text_area.selection.end
         line = self.prompt_text_area.document.get_line(cursor_row)
         post_cursor = line[cursor_column:]
@@ -237,9 +236,9 @@ class Prompt(containers.VerticalGroup):
             self.show_auto_complete(False)
             return
 
-        # self.show_auto_complete(
-        #     self.prompt_text_area.cursor_at_end_of_line or not self.text
-        # )
+        self.show_auto_complete(
+            self.prompt_text_area.cursor_at_end_of_line or not self.text
+        )
         self.update_auto_complete_location()
         event.stop()
 

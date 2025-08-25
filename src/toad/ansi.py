@@ -531,9 +531,8 @@ class ANSIStream:
             A Visual Style, or `None`.
         """
         codes = [
-            code if (code := int(code)) < 255 else 255
-            for _code in sgr.split(";")
-            if (code := _code or "0").isdigit()
+            code if code < 255 else 255
+            for code in map(int, [sgr_code or "0" for sgr_code in sgr.split(";")])
         ]
         style = NULL_STYLE
         while codes:
@@ -544,20 +543,18 @@ class ANSIStream:
                 case [48, 2, red, green, blue, *codes]:
                     # Background RGB
                     style += Style(background=Color(red, green, blue))
-                case [0, *codes]:
-                    # reset
-                    return None
-                case [code, *codes] if sgr_style := SGR_STYLE_MAP.get(code):
-                    # styles
-                    style += sgr_style
                 case [38, 5, ansi_color, *codes]:
                     # Foreground ANSI
                     style += Style(foreground=Color.parse(ANSI_COLORS[ansi_color]))
                 case [48, 5, ansi_color, *codes]:
                     # Background ANSI
                     style += Style(background=Color.parse(ANSI_COLORS[ansi_color]))
-                case [_, *codes]:
-                    pass
+                case [0, *codes]:
+                    # reset
+                    return None
+                case [code, *codes]:
+                    if sgr_style := SGR_STYLE_MAP.get(code):
+                        style += sgr_style
 
         return style
 
