@@ -98,8 +98,8 @@ class Shell:
         )
 
         os.close(slave)
-
-        reader = asyncio.StreamReader()
+        BUFFER_SIZE = 64 * 1024 * 2
+        reader = asyncio.StreamReader(BUFFER_SIZE)
         protocol = asyncio.StreamReaderProtocol(reader)
 
         loop = asyncio.get_event_loop()
@@ -119,10 +119,10 @@ class Shell:
 
         current_directory = ""
         unicode_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-        await asyncio.sleep(1 / 60)
         try:
             while True:
-                data = await reader.read(1024 * 128)
+                # await asyncio.sleep(1 / 60)
+                data = await reader.read(BUFFER_SIZE)
                 if line := unicode_decoder.decode(data, final=not data):
                     if self.ansi_log is None:
                         self.ansi_log = await self.conversation.get_ansi_log(self.width)

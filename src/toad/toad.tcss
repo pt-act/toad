@@ -74,17 +74,7 @@ Conversation {
         width: 1fr;
         overflow: hidden; 
         height: auto;        
-    }
-    
-    Contents > * {       
-        &:last-child {            
-            margin: 0 1 0 0;            
-        }   
-        & > MarkdownBlock:last-child {                        
-            margin-bottom: 0;     
-        }  
-            
-    }
+    }    
 
     ContentsGrid {
         grid-size: 2;
@@ -486,6 +476,11 @@ HelpPanel {
     padding-right: 0;
     KeyPanel {
         scrollbar-gutter: stable;
-        
+        # &> BindingsTable > .bindings-table--key {
+        #     color: $text;
+        # }
+        &> BindingsTable > .bindings-table--description {
+            color: $text-muted;
+        }
     }
 }

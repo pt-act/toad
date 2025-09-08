@@ -907,6 +907,7 @@ dependencies = [
     { name = "textual-dev" },
     { name = "textual-speedups" },
     { name = "tree-sitter" },
+    { name = "typeguard" },
 ]
 
 [package.dev-dependencies]
@@ -926,6 +927,7 @@ requires-dist = [
     { name = "textual-dev", specifier = ">=1.7.0" },
     { name = "textual-speedups", specifier = ">=0.2.0" },
     { name = "tree-sitter", specifier = ">=0.24.0" },
+    { name = "typeguard", specifier = ">=4.4.4" },
 ]
 
 [package.metadata.requires-dev]
@@ -1191,6 +1193,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/16/0c/5caa26da012c93da1eadf66c6babb1b1e2e8dd4434668c7232739df87e46/tree_sitter_yaml-0.7.1-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:219af34f4b35b5c16f25426cc3f90cf725fbba17c9592f78504086e67787be09", size = 90443, upload-time = "2025-05-22T13:34:53.626Z" },
     { url = "https://files.pythonhosted.org/packages/92/25/a14297ea2a575bc3c19fcf58a5983a926ad732c32af23a346d7fa0563d8d/tree_sitter_yaml-0.7.1-cp310-abi3-win_amd64.whl", hash = "sha256:550645223d68b7d6b4cfedf4972754724e64d369ec321fa33f57d3ca54cafc7c", size = 45517, upload-time = "2025-05-22T13:34:54.545Z" },
     { url = "https://files.pythonhosted.org/packages/62/fa/b25e688df5b4e024bc3627bc3f951524ef9c8b0756f0646411efa5063a10/tree_sitter_yaml-0.7.1-cp310-abi3-win_arm64.whl", hash = "sha256:298ade69ad61f76bb3e50ced809650ec30521a51aa2708166b176419ccb0a6ba", size = 43801, upload-time = "2025-05-22T13:34:55.471Z" },
+]
+
+[[package]]
+name = "typeguard"
+version = "4.4.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c7/68/71c1a15b5f65f40e91b65da23b8224dad41349894535a97f63a52e462196/typeguard-4.4.4.tar.gz", hash = "sha256:3a7fd2dffb705d4d0efaed4306a704c89b9dee850b688f060a8b1615a79e5f74", size = 75203, upload-time = "2025-06-18T09:56:07.624Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/a9/e3aee762739c1d7528da1c3e06d518503f8b6c439c35549b53735ba52ead/typeguard-4.4.4-py3-none-any.whl", hash = "sha256:b5f562281b6bfa1f5492470464730ef001646128b180769880468bd84b68b09e", size = 34874, upload-time = "2025-06-18T09:56:05.999Z" },
 ]
 
 [[package]]

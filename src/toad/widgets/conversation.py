@@ -14,9 +14,10 @@ from textual.binding import Binding
 from textual.widget import Widget
 from textual.widgets import Static
 from textual.widgets.markdown import MarkdownBlock, MarkdownFence
-from textual.geometry import Offset
+from textual.geometry import Offset, Spacing
 from textual.reactive import var, Initialize
 from textual.layouts.grid import GridLayout
+from textual.layout import WidgetPlacement
 
 
 import llm
@@ -361,7 +362,16 @@ class Cursor(Static):
 
 
 class Contents(containers.VerticalGroup, can_focus=False):
-    pass
+    def process_layout(
+        self, placements: list[WidgetPlacement]
+    ) -> list[WidgetPlacement]:
+        if placements:
+            last_placement = placements[-1]
+            top, right, bottom, left = last_placement.margin
+            placements[-1] = last_placement._replace(
+                margin=Spacing(top, right, 0, left)
+            )
+        return placements
 
 
 class ContentsGrid(containers.Grid):
