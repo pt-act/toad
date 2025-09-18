@@ -123,9 +123,11 @@ class Server:
 
     async def call(self, json: JSONObject | JSONList) -> JSONType:
         if isinstance(json, dict):
-            return await self._dispatch_object(json)
+            response = await self._dispatch_object(json)
         else:
-            return await self._dispatch_batch(json)
+            response = await self._dispatch_batch(json)
+        log.debug(f"OUT {response}")
+        return response
 
     def expose_instance(self, instance: object) -> None:
         """Add methods from the given instance."""
@@ -239,7 +241,7 @@ class Server:
             error.id = request_id
             raise error
         except Exception as error:
-            log.exception(f"Error in exposed JSONRPC method {method}")
+            log.debug(f"Error in exposed JSONRPC method; {error}")
             raise InternalError(str(error), id=request_id)
 
         if request_id is None:
@@ -247,6 +249,7 @@ class Server:
             return None
 
         response_object = {"jsonrpc": "2.0", "result": result, "id": request_id}
+        log.debug(response_object)
         return response_object
 
     async def _dispatch_batch(self, json: JSONList) -> list[JSONType]:

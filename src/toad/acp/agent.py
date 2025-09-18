@@ -87,7 +87,7 @@ class Agent(AgentBase):
         """Create a request object."""
         return API.request(self.send)
 
-    @jsonrpc.expose("update", prefix="session/")
+    @jsonrpc.expose("session/update")
     def rpc_session_update(self, sessionId: str, update: protocol.SessionUpdate):
         """Agent requests an update.
 
@@ -109,7 +109,20 @@ class Agent(AgentBase):
             }:
                 message_target.post_message(messages.ACPThinking(type, text))
 
-    @jsonrpc.expose("read_text_file", prefix="fs/")
+    @jsonrpc.expose("session/request_permission")
+    def rpc_request_permission(
+        self,
+        sessionId: str,
+        options: list[protocol.PermissionOption],
+        toolCall: protocol.ToolCallUpdate,
+        _meta: dict | None = None,
+    ):
+        if (message_target := self._message_target) is None:
+            return
+        message_target.post_message(messages.ACPRequestPermission(options, toolCall))
+        pass
+
+    @jsonrpc.expose("fs/read_text_file")
     def rpc_read_text_file(
         self,
         sessionId: str,
@@ -130,7 +143,7 @@ class Agent(AgentBase):
                 text = "\n".join(text.splitlines()[line : line + limit])
         return {"content": text}
 
-    @jsonrpc.expose("write_text_file", prefix="fs/")
+    @jsonrpc.expose("fs/write_text_file")
     def rpc_write_text_file(self, sessionId: str, path: str, content: str) -> None:
         # TODO: What if the agent wants to write outside of the project path?
         # https://agentclientprotocol.com/protocol/file-system#writing-files

@@ -48,7 +48,7 @@ Conversation {
 
     &.-scrollbar-thin {
         Window {
-            scrollbar-gutter: stable;
+            # scrollbar-gutter: stable;
             scrollbar-size-vertical: 1;
         }
         

@@ -288,3 +288,18 @@ class PermissionOption(TypedDict, total=False):
     kind: Required[PermissionOptionKind]
     name: Required[str]
     optionId: Required[PermissionOptionId]
+
+
+class OutcomeCancelled(TypedDict, total=False):
+    outcome: Required[str]
+
+
+class OutcomeSelected(TypedDict, total=False):
+    optionId: Required[PermissionOptionId]
+    outcome: Required[str]
+
+
+# https://agentclientprotocol.com/protocol/schema#requestpermissionoutcome
+class RequestPermissionOutcome(TypedDict, total=False):
+    cancelled: OutcomeCancelled
+    selected: OutcomeSelected
