@@ -11,4 +11,4 @@ gemini-acp:
 
 .PHONY: claude-acp
 claude-acp:
-	$(run) acp "claude-code-acp"
+	$(run) acp "claude-code-acp" --project-dir ~/sandbox

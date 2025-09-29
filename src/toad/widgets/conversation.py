@@ -566,36 +566,16 @@ class Conversation(containers.Vertical):
     async def on_menu_option_selected(self, event: Menu.OptionSelected) -> None:
         await event.menu.remove()
         self.window.focus(scroll_visible=False)
-
         if event.action is not None:
-            # await self.run_action(event.action, {"block": event.owner})
             self.call_after_refresh(
                 self.run_action, event.action, {"block": event.owner}
             )
-        # await event.menu.remove()
-        # self.cursor.visible = True
-
-    # @on(events.DescendantFocus)
-    # def on_descendant_focus(self, event: events.DescendantFocus):
-    #     if isinstance(event.widget, HighlightedTextArea):
-    #         self.cursor_offset = -1
-
-    # @on(events.DescendantBlur)
-    # def on_descendant_blur(self, event: events.DescendantBlur):
-    #     if isinstance(event.widget, Window):
-    #         self.cursor.visible = False
 
     @on(Menu.Dismissed)
     async def on_menu_dismissed(self, event: Menu.Dismissed) -> None:
         event.stop()
-        # self.cursor.visible = True
-
-        # with self.window.prevent(events.DescendantFocus):
-        #     self.window.focus(scroll_visible=False)
-
         self.window.focus(scroll_visible=False)
         await event.menu.remove()
-        # self.cursor.visible = True
 
     @on(CurrentWorkingDirectoryChanged)
     def on_current_working_directory_changed(
@@ -637,22 +617,8 @@ class Conversation(containers.Vertical):
             message.tool_call,
         )
 
-        # await self.post_tool_call(message.tool_call)
-        # self.ask(
-        #     [
-        #         Answer(
-        #             option["name"],
-        #             option["optionId"],
-        #         )
-        #         for option in message.options
-        #     ],
-        #     callback=message.result_future.set_result,
-        # )
-
     @on(acp_messages.ToolCallUpdate)
     async def on_acp_tool_call_update(self, message: acp_messages.ToolCallUpdate):
-        print("TOOL CALL UPDATE")
-
         if message.status in (None, "completed"):
             self._agent_thought = None
             self._agent_response = None
@@ -678,7 +644,6 @@ class Conversation(containers.Vertical):
         tool_call_update: acp_protocol.ToolCallUpdatePermissionRequest,
     ) -> None:
         kind = tool_call_update.get("kind")
-        print(f"request_permission {kind=}")
         if kind is None:
             from toad.widgets.tool_call import ToolCall
 
@@ -716,7 +681,6 @@ class Conversation(containers.Vertical):
             result = await self.app.push_screen_wait(permissions_screen)
             result_future.set_result(result)
         elif kind == "execute":
-            print("EXECUTE")
             title = tool_call_update.get("title", "") or ""
 
             def answer_callback(answer: Answer) -> None:
@@ -727,9 +691,6 @@ class Conversation(containers.Vertical):
     async def post_tool_call(
         self, tool_call_update: acp_protocol.ToolCallUpdate
     ) -> None:
-        self.log("post_tool_call")
-        self.log(tool_call_update)
-
         if (contents := tool_call_update.get("content")) is None:
             return
 
