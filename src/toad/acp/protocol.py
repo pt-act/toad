@@ -340,7 +340,7 @@ class CreateTerminalResponse(TypedDict, total=False):
     terminalId: Required[str]
 
 
-https://agentclientprotocol.com/protocol/schema#killterminalcommandresponse
+# https://agentclientprotocol.com/protocol/schema#killterminalcommandresponse
 class KillTerminalCommandResponse(TypedDict, total=False):
     _meta: dict
 
@@ -352,14 +352,17 @@ class TerminalOutputResponse(TypedDict, total=False):
     output: Required[str]
     truncated: Required[bool]
 
+
 # https://agentclientprotocol.com/protocol/schema#releaseterminalresponse
 class ReleaseTerminalResponse(TypedDict, total=False):
     _meta: dict
+
 
 # https://agentclientprotocol.com/protocol/schema#waitforterminalexitresponse
 class WaitForTerminalExitResponse(TypedDict, total=False):
     _meta: dict
     exitCode: int | None
     signal: str | None
+
 
 # ---------------------------------------------------------------------------------------
