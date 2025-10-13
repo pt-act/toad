@@ -168,7 +168,7 @@ class Terminal(ANSILog):
         while self._output_bytes_count > self._output_byte_limit and self._output:
             oldest_bytes = self._output[0]
             oldest_bytes_count = len(oldest_bytes)
-            if self._output_bytes_count - oldest_bytes_count <= self._output_byte_limit:
+            if self._output_bytes_count - oldest_bytes_count < self._output_byte_limit:
                 break
             self._output.popleft()
             self._output_bytes_count -= oldest_bytes_count
@@ -193,6 +193,8 @@ class Terminal(ANSILog):
             return (byte_value & 0b11000000) == 0b10000000
 
         if self._output_byte_limit is not None:
+            output_bytes = output_bytes[-self._output_byte_limit :]
+            # Must start on a utf-8 boundary
             # Discard initial bytes that aren't a utf-8 continuation byte.
             for offset, byte_value in enumerate(output_bytes):
                 if not is_continuation(byte_value):
