@@ -216,7 +216,7 @@ Conversation {
     Terminal {
         height: auto;   
         border: panel $text-secondary 90%;          
-        padding: 1 1 0 1;        
+        padding: 0 1 0 1;        
         &.-success {
             border: panel $text-success 90%;              
         }

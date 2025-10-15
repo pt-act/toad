@@ -78,7 +78,7 @@ class Terminal(ANSILog):
         )
         self._command = command
         self._output_byte_limit = output_byte_limit
-        self._task: asyncio.Task | None = None
+        self._command_task: asyncio.Task | None = None
         self._output: deque[bytes] = deque()
 
         self._process: Process | None = None
@@ -127,7 +127,7 @@ class Terminal(ANSILog):
 
     async def wait_for_exit(self) -> tuple[int | None, str | None]:
         """Wait for the terminal process to exit."""
-        if self._process is None or self._task is None:
+        if self._process is None or self._command_task is None:
             return None, None
         # await self._task
         await self._exit_event.wait()
@@ -161,7 +161,9 @@ class Terminal(ANSILog):
         assert self._command is not None
         self._width = width or 80
         self._height = height or 80
-        self._task = asyncio.create_task(self.run(), name=f"Terminal {self._command}")
+        self._command_task = asyncio.create_task(
+            self.run(), name=f"Terminal {self._command}"
+        )
         await self._ready_event.wait()
 
     async def run(self) -> None:
@@ -175,7 +177,7 @@ class Terminal(ANSILog):
             self._exit_event.set()
 
     async def _run(self) -> None:
-        self._task = asyncio.current_task()
+        self._command_task = asyncio.current_task()
 
         assert self._command is not None
         master, slave = pty.openpty()
