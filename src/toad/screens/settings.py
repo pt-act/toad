@@ -6,6 +6,7 @@ from textual import on
 from textual.app import ComposeResult
 from textual import lazy
 from textual import containers
+from textual.content import Content
 from textual.screen import ModalScreen
 from textual.widgets import Input, Select, Checkbox, Footer, Static, TextArea
 from textual.compose import compose
@@ -64,9 +65,23 @@ class SettingsScreen(ModalScreen):
                         name=f"{group_title.lower()} {setting.title.lower()}",
                     ):
                         value = settings.get(setting.key, object, expand=False)
+                        default = settings.schema.get_default(setting.key)
+
+                        if setting.type == "text" or default is None:
+                            help = Content.from_markup(setting.help)
+                        else:
+                            if setting.help:
+                                help = Content.assemble(
+                                    Content.from_markup(setting.help),
+                                    (f"\ndefault: {default!r}", "$text-secondary"),
+                                )
+                            else:
+                                help = Content.styled(
+                                    f"default: {default!r}", "$text-secondary"
+                                )
+
                         yield Static(setting.title, classes="title")
-                        if setting.help:
-                            yield Static(setting.help, classes="help")
+                        yield Static(help, classes="help")
                         if setting.type == "string":
                             with self.prevent(Input.Changed):
                                 yield Input(
@@ -103,6 +118,27 @@ class SettingsScreen(ModalScreen):
                                     name=setting.key,
                                     validators=validators,
                                 )
+                        elif setting.type == "number":
+                            try:
+                                integer_value = float(value)
+                            except (ValueError, TypeError):
+                                integer_value = setting.default
+                            setting_validate = setting.validate or []
+                            validators: list[Validator] = []
+                            for validate in setting_validate:
+                                validate_type = validate["type"]
+                                if validate_type == "minimum":
+                                    validators.append(Number(minimum=validate["value"]))
+                                elif validate_type == "maximum":
+                                    validators.append(Number(maximum=validate["value"]))
+                            with self.prevent(Input.Changed):
+                                yield Input(
+                                    str(integer_value),
+                                    type="number",
+                                    classes="input",
+                                    name=setting.key,
+                                    validators=validators,
+                                )
                         elif setting.type == "choices":
                             select_value = str(value)
                             choices = setting.choices or []
@@ -130,6 +166,7 @@ class SettingsScreen(ModalScreen):
         self.query_one("#search").focus(scroll_visible=False)
 
     @on(Input.Blurred, "Input")
+    @on(Input.Submitted, "Input")
     def on_input_blurred(self, event: Input.Blurred) -> None:
         if event.validation_result and not event.validation_result.is_valid:
             self.notify(
@@ -144,6 +181,8 @@ class SettingsScreen(ModalScreen):
         if event.input.name is not None:
             if event.input.type == "integer":
                 self.app.settings.set(event.input.name, int(event.value or "0"))
+            elif event.input.type == "number":
+                self.app.settings.set(event.input.name, float(event.value or "0"))
             else:
                 self.app.settings.set(event.input.name, event.value)
 

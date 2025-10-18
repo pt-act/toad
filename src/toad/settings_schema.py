@@ -88,6 +88,14 @@ SCHEMA: list[SchemaDict] = [
                     "quotes",
                 ],
             },
+            {
+                "key": "flash_duration",
+                "title": "Flash duration",
+                "help": "Default duration of flash messages (in seconds)",
+                "type": "number",
+                "default": 3.0,
+                "validate": [{"type": "minimum", "value": 0.5}],
+            },
         ],
     },
     {

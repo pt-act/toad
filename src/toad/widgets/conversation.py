@@ -4,7 +4,7 @@ from asyncio import Future
 import asyncio
 from functools import cached_property
 from operator import attrgetter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from pathlib import Path
 
 from typing import Callable, Any
@@ -35,6 +35,7 @@ from toad.acp import protocol as acp_protocol
 from toad.acp.agent import Mode
 from toad.answer import Answer
 from toad.agent import AgentBase, AgentReady
+from toad.widgets.flash import Flash
 from toad.widgets.menu import Menu
 from toad.widgets.note import Note
 from toad.widgets.prompt import Prompt
@@ -192,6 +193,7 @@ class Conversation(containers.Vertical):
                 with containers.VerticalGroup(id="cursor-container"):
                     yield Cursor()
                 yield Contents(id="contents")
+        yield Flash()
         yield Prompt().data_bind(
             project_path=Conversation.project_path,
             agent_info=Conversation.agent_info,
@@ -203,6 +205,27 @@ class Conversation(containers.Vertical):
     @cached_property
     def conversation(self) -> llm.Conversation:
         return llm.get_model(self.app.settings.get("llm.model", str)).conversation()
+
+    @on(messages.Flash)
+    def on_flash(self, event: messages.Flash) -> None:
+        event.stop()
+        self.flash(event.content, duration=event.duration, style=event.style)
+
+    def flash(
+        self,
+        content: str | Content,
+        *,
+        duration: float | None = None,
+        style: Literal["default", "warning", "error", "success"] = "default",
+    ) -> None:
+        """Flash a single-line message to the user.
+
+        Args:
+            content: Content to flash.
+            style: A semantic style.
+            duration: Duration in seconds of the flash, or `None` to use default in settings.
+        """
+        self.query_one(Flash).flash(content, duration=duration, style=style)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "mode_switcher":
@@ -270,6 +293,9 @@ class Conversation(containers.Vertical):
     @on(AgentReady)
     def on_agent_ready(self) -> None:
         self.agent_ready = True
+        if self.agent is not None:
+            content = Content.assemble(self.agent.get_info(), " connected")
+            self.flash(content, style="success")
 
     @on(messages.WorkStarted)
     def on_work_started(self) -> None:
@@ -819,7 +845,7 @@ class Conversation(containers.Vertical):
         self.call_after_refresh(
             self.shell.send,
             command,
-            self.scrollable_content_region.width - 6,
+            self.window.size.width - 3 - self.window.styles.scrollbar_size_vertical,
             self.window.scrollable_content_region.height - 2,
         )
 
@@ -955,7 +981,7 @@ class Conversation(containers.Vertical):
             return
         if text:
             self.app.copy_to_clipboard(text)
-            self.notify("Copied to clipboard")
+            self.flash("Copied to clipboard")
 
     def action_copy_to_prompt(self) -> None:
         block = self.get_cursor_block()

@@ -144,8 +144,11 @@ class PromptTextArea(HighlightedTextArea):
     def action_multiline_submit(self) -> None:
         if not self.agent_ready:
             self.app.bell()
-            self.notify(
-                "Agent is not ready. Please wait...", title="Agent", severity="warning"
+            self.post_message(
+                messages.Flash(
+                    "Agent is not ready. Please wait while the agent conntects…",
+                    "warning",
+                )
             )
             return
         self.post_message(UserInputSubmitted(self.text, self.shell_mode))
@@ -157,8 +160,11 @@ class PromptTextArea(HighlightedTextArea):
     def action_submit(self) -> None:
         if not self.agent_ready:
             self.app.bell()
-            self.notify(
-                "Agent is not ready. Please wait...", title="Agent", severity="warning"
+            self.post_message(
+                messages.Flash(
+                    "Agent is not ready. Please wait while the agent connects…",
+                    "warning",
+                )
             )
             return
         if self.suggestion:

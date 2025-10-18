@@ -39,7 +39,7 @@ class SchemaDict(TypedDict, total=False):
 type SettingsType = dict[str, object]
 
 
-INPUT_TYPES = {"boolean", "integer", "string", "choices", "text"}
+INPUT_TYPES = {"boolean", "integer", "number", "string", "choices", "text"}
 
 
 class SettingsError(Exception):
@@ -158,6 +158,7 @@ class Schema:
             "object": SchemaDict,
             "string": str,
             "integer": int,
+            "number": float,
             "boolean": bool,
             "choices": str,
             "text": str,
@@ -239,6 +240,10 @@ class Settings:
     def changed(self) -> bool:
         return self._changed
 
+    @property
+    def schema(self) -> Schema:
+        return self._schema
+
     def up_to_date(self) -> None:
         """Set settings as up to date (clears changed flag)."""
         self._changed = False
@@ -271,10 +276,15 @@ class Settings:
                     default = self._schema.get_default(key)
                     if default is None:
                         default = expect_type()
+                    if not isinstance(default, expect_type):
+                        default = expect_type(default)
                     assert isinstance(default, expect_type)
                     return default
+
                 if isinstance(value, str) and expand:
                     value = expandvars(value)
+                if not isinstance(value, expect_type):
+                    value = expect_type(value)
                 if not isinstance(value, expect_type):
                     raise InvalidValue(
                         f"key {sub_key!r} is not of expected type {expect_type.__name__}"

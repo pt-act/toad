@@ -92,7 +92,11 @@ class ANSILog(ScrollView, can_focus=False):
         return self._ansi_stream.current_directory
 
     def _update_width(self) -> None:
-        window_width = self.scrollable_content_region.width or 80
+        window_width = (
+            (self.scrollable_content_region.width or 80)
+            - 1
+            - self.parent.styles.scrollbar_size_vertical
+        )
         self.max_window_width = max(self.max_window_width, window_width)
         if self.minimum_terminal_width == -1 and window_width:
             self.minimum_terminal_width = window_width

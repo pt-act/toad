@@ -1,5 +1,8 @@
 from dataclasses import dataclass
 
+from typing import Literal
+
+from textual.content import Content
 from textual.widget import Widget
 from textual.message import Message
 
@@ -41,3 +44,18 @@ class InsertPath(Message):
 @dataclass
 class ChangeMode(Message):
     mode_id: str | None
+
+
+@dataclass
+class Flash(Message):
+    """Request a message flash.
+
+    Args:
+        Message: Content of flash.
+        style: Semantic style.
+        duration: Duration in seconds or `None` for default.
+    """
+
+    content: str | Content
+    style: Literal["default", "warning", "success", "error"]
+    duration: float | None = None
