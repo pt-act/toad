@@ -364,8 +364,6 @@ class Conversation(containers.Vertical):
     @on(acp_messages.Update)
     async def on_acp_agent_message(self, message: acp_messages.Update):
         message.stop()
-        # if self._agent_thought and self._agent_thought.loading:
-        #     await self._agent_thought.remove()
         self._agent_thought = None
         await self.post_agent_response(message.text)
 
