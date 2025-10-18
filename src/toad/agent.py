@@ -37,5 +37,8 @@ class AgentBase(ABC):
             str: The stop reason.
         """
 
+    async def cancel(self) -> None:
+        """Cancel prompt."""
+
     def get_info(self) -> Content:
         return Content("")

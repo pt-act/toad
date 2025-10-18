@@ -348,9 +348,6 @@ class Agent(AgentBase):
         return_code, signal = result_future.result()
         return {"exitCode": return_code, "signal": signal}
 
-    # @jsonrpc.expose("session/set_mode")
-    # async def rpc_session_set_mode(self, sessionId:str, modeID:str) ->
-
     async def _run_agent(self) -> None:
         """Task to communicate with the agent subprocess."""
 
@@ -527,6 +524,18 @@ class Agent(AgentBase):
 
     async def set_mode(self, mode_id: str) -> str | None:
         return await self.acp_session_set_mode(mode_id)
+
+    async def acp_session_cancel(self) -> None:
+        with self.request():
+            response = api.session_cancel(self.session_id, {})
+        try:
+            await response.wait()
+        except jsonrpc.APIError:
+            # No-op if there is nothing to cancel
+            return
+
+    async def cancel(self) -> None:
+        await self.acp_session_cancel()
 
 
 if __name__ == "__main__":

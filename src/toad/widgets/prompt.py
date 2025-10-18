@@ -94,7 +94,7 @@ class PromptTextArea(HighlightedTextArea):
 
     auto_completes: var[list[Option]] = var(list)
     multi_line = var(False, bindings=True)
-    shell_mode = var(False)
+    shell_mode = var(False, bindings=True)
     agent_ready: var[bool] = var(False)
 
     class Submitted(Message):
@@ -130,7 +130,7 @@ class PromptTextArea(HighlightedTextArea):
             pre_cursor = line[:cursor_column]
             prompt.load_suggestions(pre_cursor, post_cursor)
         else:
-            self.query_ancestor(Prompt).show_auto_complete(False)
+            self.query_ancestor(Prompt).show_auto_completes = False
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "newline" and self.multi_line:
@@ -219,12 +219,15 @@ class PromptTextArea(HighlightedTextArea):
 
 
 class Prompt(containers.VerticalGroup):
+    BINDINGS = [
+        Binding("escape", "dismiss", "Dismiss"),
+    ]
+
     PROMPT_NULL = " "
     PROMPT_SHELL = Content.styled("$", "$text-primary")
     PROMPT_AI = Content.styled("❯", "$text-secondary")
     PROMPT_MULTILINE = Content.styled("☰", "$text-secondary")
 
-    BINDINGS = [Binding("escape", "dismiss", "Dismiss", show=False)]
     prompt_container = getters.query_one("#prompt-container", Widget)
     prompt_text_area = getters.query_one(PromptTextArea)
     prompt_label = getters.query_one("#prompt", Label)
@@ -235,6 +238,7 @@ class Prompt(containers.VerticalGroup):
     mode_switcher = getters.query_one(ModeSwitcher)
 
     auto_completes: var[list[Option]] = var(list)
+    show_auto_completes: var[bool] = var(False, bindings=True)
     slash_commands: var[list[SlashCommand]] = var(list)
     shell_mode = var(False)
     multi_line = var(False)
@@ -269,13 +273,17 @@ class Prompt(containers.VerticalGroup):
     def watch_current_mode(self, mode: Mode | None) -> None:
         self.set_class(mode is not None, "-has-mode")
         if mode is not None:
-            # tooltip = f"[b]{mode.description}[/b]\n\n(click to open mode switcher)"
             tooltip = Content.from_markup(
                 "[b]$description[/]\n\n(click to open mode switcher)",
                 description=mode.description,
             )
             self.query_one(ModeInfo).with_tooltip(tooltip).update(mode.name)
         self.watch_modes(self.modes)
+
+    def watch_show_auto_completes(self, show: bool) -> None:
+        self.auto_complete.display = show
+        if not show:
+            self.prompt_text_area.suggestion = ""
 
     @on(events.Click, "ModeInfo")
     def on_click(self):
@@ -399,10 +407,10 @@ class Prompt(containers.VerticalGroup):
                 highlighted_option := self.auto_complete.highlighted_option
             ) is not None and highlighted_option.id:
                 self.suggest(highlighted_option.id)
-            self.show_auto_complete(True)
+            self.show_auto_completes = True
         else:
             self.auto_complete.clear_options()
-            self.show_auto_complete(False)
+            self.show_auto_completes = False
 
     def watch_show_path_search(self, show: bool) -> None:
         self.prompt_text_area.suggestion = ""
@@ -412,25 +420,17 @@ class Prompt(containers.VerticalGroup):
         if self.auto_completes:
             self.update_auto_complete_location()
 
-    def show_auto_complete(self, show: bool) -> None:
-        if self.auto_complete.display == show:
-            return
-
-        self.auto_complete.display = show
-        if not show:
-            self.prompt_text_area.suggestion = ""
-            return
-
     @on(HighlightedTextArea.CursorMove)
     def on_cursor_move(self, event: HighlightedTextArea.CursorMove) -> None:
         selection = event.selection
         if selection.end != selection.start:
-            self.show_auto_complete(False)
+            self.show_auto_completes = False
             return
 
-        self.show_auto_complete(
+        self.show_auto_completes = (
             self.prompt_text_area.cursor_at_end_of_line or not self.text
-        )
+        ) and bool(self.auto_completes)
+
         self.update_auto_complete_location()
         event.stop()
 
@@ -585,10 +585,15 @@ class Prompt(containers.VerticalGroup):
             yield ModeSwitcher()
             yield ModeInfo("mode")
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "dismiss":
+            return True if (self.shell_mode or self.show_auto_completes) else False
+        return True
+
     def action_dismiss(self) -> None:
         if self.shell_mode:
             self.shell_mode = False
-        elif self.auto_complete.display:
-            self.show_auto_complete(False)
+        elif self.show_auto_completes:
+            self.show_auto_completes = False
         else:
             raise SkipAction()

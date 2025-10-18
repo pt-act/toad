@@ -6,6 +6,7 @@ from functools import cached_property
 from operator import attrgetter
 from typing import TYPE_CHECKING, Literal
 from pathlib import Path
+from time import monotonic
 
 from typing import Callable, Any
 
@@ -148,7 +149,7 @@ class Conversation(containers.Vertical):
             group=CURSOR_BINDING_GROUP,
         ),
         Binding("enter", "select_block", "Select", tooltip="Select this block"),
-        Binding("escape", "dismiss", "Dismiss", show=False),
+        Binding("escape", "cancel", "Cancel", tooltip="Cancel agent's turn"),
         Binding("ctrl+m", "mode_switcher", "Modes", tooltip="Open the mode switcher"),
         Binding("ctrl+comma,f2", "settings", "Settings", tooltip="Settings screen"),
     ]
@@ -170,11 +171,12 @@ class Conversation(containers.Vertical):
 
     shell: var[Shell] = var(Initialize(create_shell))
 
-    agent: var[AgentBase | None] = var(None)
+    agent: var[AgentBase | None] = var(None, bindings=True)
     agent_info: var[Content] = var(Content())
     agent_ready: var[bool] = var(False)
     modes: var[dict[str, Mode]] = var({}, bindings=True)
     current_mode: var[Mode | None] = var(None)
+    turn: var[Literal["agent", "client"] | None] = var(None, bindings=True)
 
     def __init__(self, project_path: Path) -> None:
         super().__init__()
@@ -185,6 +187,7 @@ class Conversation(containers.Vertical):
         self._loading: Loading | None = None
         self._agent_response: AgentResponse | None = None
         self._agent_thought: AgentThought | None = None
+        self._last_escape_time: float = monotonic()
 
     def compose(self) -> ComposeResult:
         yield Throbber(id="throbber")
@@ -230,6 +233,8 @@ class Conversation(containers.Vertical):
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "mode_switcher":
             return bool(self.modes)
+        if action == "cancel":
+            return True if (self.agent and self.turn == "agent") else None
         return True
 
     async def post_agent_response(self, fragment: str = "") -> AgentResponse:
@@ -344,9 +349,10 @@ class Conversation(containers.Vertical):
             stop_reason: str | None = None
             self.busy_count += 1
             try:
+                self.turn = "agent"
                 stop_reason = await self.agent.send_prompt(prompt)
-            except jsonrpc.APIError as error:
-                self.notify(error.message, title="Send prompt", severity="error")
+            except jsonrpc.APIError:
+                self.turn = "client"
             finally:
                 self.busy_count -= 1
             self.call_later(self.agent_turn_over, stop_reason)
@@ -360,6 +366,11 @@ class Conversation(containers.Vertical):
         if self._agent_thought is not None and self._agent_thought.loading:
             await self._agent_thought.remove()
 
+        self.turn = "client"
+        if self._agent_thought is not None and self._agent_thought.loading:
+            await self._agent_thought.remove()
+        if self._loading is not None:
+            await self._loading.remove()
         self._agent_response = None
         self._agent_thought = None
 
@@ -910,7 +921,17 @@ class Conversation(containers.Vertical):
         self.refresh_block_cursor()
 
     # def action_dismiss(self) -> None:
-    #     self.cursor_offset = -1
+    #     self.cursor_offset = -1\
+
+    @work
+    async def action_cancel(self) -> None:
+        if monotonic() - self._last_escape_time < 3:
+            if (agent := self.agent) is not None:
+                await agent.cancel()
+                self.flash("Turn cancelled", style="success")
+        else:
+            self.flash("Press [b]esc[/] again to cancel agent's turn")
+            self._last_escape_time = monotonic()
 
     def focus_prompt(self) -> None:
         self.cursor_offset = -1
