@@ -36,6 +36,24 @@ Note,MarkdownNote {
     }
 }
 
+Toast {    
+    padding: 0 1;
+    background: $background;
+    color: $text-muted;
+    .toast--title {        
+        color: $text;            
+    }
+    &.-information {
+        border: round $primary;                     
+    }
+    &.-warning {
+        border: round $warning;                
+    }
+    &.-error {
+        border: round $error;          
+    }    
+}
+
 Menu {
     border: round $accent;
     background: transparent;
