@@ -34,7 +34,7 @@ from toad.app import ToadApp
 from toad.acp import protocol as acp_protocol
 from toad.acp.agent import Mode
 from toad.answer import Answer
-from toad.agent import AgentBase, AgentReady
+from toad.agent import AgentBase, AgentReady, AgentFail
 from toad.widgets.flash import Flash
 from toad.widgets.menu import Menu
 from toad.widgets.note import Note
@@ -299,6 +299,11 @@ class Conversation(containers.Vertical):
         if self.agent is not None:
             content = Content.assemble(self.agent.get_info(), " connected")
             self.flash(content, style="success")
+
+    @on(AgentFail)
+    def on_agent_fail(self, message: AgentFail) -> None:
+        self.agent_ready = True
+        self.notify(message.message, title="Agent failure", severity="error", timeout=5)
 
     @on(messages.WorkStarted)
     def on_work_started(self) -> None:

@@ -14,7 +14,7 @@ from textual.message_pump import MessagePump
 from textual import log
 
 from toad import jsonrpc
-from toad.agent import AgentBase, AgentReady
+from toad.agent import AgentBase, AgentReady, AgentFail
 from toad.acp import protocol
 from toad.acp import api
 from toad.acp.api import API
@@ -341,7 +341,6 @@ class Agent(AgentBase):
         if not self.post_message(
             messages.WaitForTerminalExit(terminalId, result_future)
         ):
-            print("!!!")
             raise RuntimeError("Unable to wait for terminal exit; no terminal found")
 
         await result_future
@@ -356,14 +355,19 @@ class Agent(AgentBase):
         PIPE = asyncio.subprocess.PIPE
         env = os.environ.copy()
         env["TOAD_CWD"] = str(Path("./").absolute())
-        process = self._process = await asyncio.create_subprocess_shell(
-            self.command,
-            stdin=PIPE,
-            stdout=PIPE,
-            stderr=PIPE,
-            env=env,
-            cwd=str(self.project_root_path),
-        )
+
+        try:
+            process = self._process = await asyncio.create_subprocess_shell(
+                self.command,
+                stdin=PIPE,
+                stdout=PIPE,
+                stderr=PIPE,
+                env=env,
+                cwd=str(self.project_root_path),
+            )
+        except Exception:
+            self.post_message(AgentFail("Failed to start agent"))
+            return
 
         self._task = asyncio.create_task(self.run())
 
@@ -420,7 +424,10 @@ class Agent(AgentBase):
             assert isinstance(agent_data, dict)
             tasks.add(asyncio.create_task(call_jsonrpc(agent_data)))
 
-        print("AGENT RETURN", process.returncode)
+        if process.returncode:
+            self.post_message(
+                AgentFail(f"Agent returned a failure code: [b]{process.returncode}")
+            )
 
         agent_output.close()
         print("exit")

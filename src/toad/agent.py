@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 
 from textual.content import Content
@@ -7,6 +8,13 @@ from textual.message import Message
 
 class AgentReady(Message):
     """Agent is ready."""
+
+
+@dataclass
+class AgentFail(Message):
+    """Agent failed to start."""
+
+    message: str
 
 
 class AgentBase(ABC):
