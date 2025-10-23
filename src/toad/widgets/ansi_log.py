@@ -11,11 +11,16 @@ from textual.cache import LRUCache
 from textual.content import Content
 from textual.scroll_view import ScrollView
 from textual.strip import Strip
-from textual.style import Style
 from textual.selection import Selection
 from textual.filter import LineFilter
 
-from toad.ansi import ANSIStream
+from toad.ansi import (
+    ANSIStream,
+    ANSICursor,
+    ANSIClear,
+    ANSICommand,
+    ANSIWorkingDirectory,
+)
 from toad.menus import MenuItem
 
 
@@ -85,15 +90,31 @@ class ANSILog(ScrollView, can_focus=False):
         self._reflow_width: int | None = None
 
         self._width = 80
+        self._finalized = False
+
+        self.current_directory = ""
 
         super().__init__(name=name, id=id, classes=classes, disabled=disabled)
 
+    def finalize(self) -> None:
+        """Finalize the log.
+
+        A finalized log will reject new writes.
+        Adds the TCSS class `-finalized`.
+        """
+        self._finalized = True
+        self.add_class("-finalized")
+
     @property
-    def current_directory(self) -> str:
-        return self._ansi_stream.current_directory
+    def is_finalized(self) -> bool:
+        return self._finalized
 
     def _update_width(self) -> None:
-        window_width = self.scrollable_content_region.width or 80
+        window_width = (
+            (self.scrollable_content_region.width or 80)
+            - 1
+            - self.parent.styles.scrollbar_size_vertical
+        )
         self.max_window_width = max(self.max_window_width, window_width)
         if self.minimum_terminal_width == -1 and window_width:
             self.minimum_terminal_width = window_width
@@ -130,9 +151,6 @@ class ANSILog(ScrollView, can_focus=False):
         return
         yield
 
-    #     yield MenuItem("Copy to clipboard", "copy_to_clipboard", "c")
-    #     yield MenuItem("Copy to prompt", "copy_to_prompt", "p")
-
     def action_copy_to_clipboard(self) -> None:
         self.notify("Copy to clipboard")
 
@@ -145,9 +163,6 @@ class ANSILog(ScrollView, can_focus=False):
         else:
             return text_content
 
-    def get_line_filters(self) -> Sequence[LineFilter]:
-        return []
-
     def on_mount(self):
         self.anchor()
         self._update_width()
@@ -157,6 +172,7 @@ class ANSILog(ScrollView, can_focus=False):
         self._clear_caches()
         self._reflow()
 
+    @property
     def allow_select(self) -> bool:
         return True
 
@@ -189,63 +205,94 @@ class ANSILog(ScrollView, can_focus=False):
         self.line_start = 0
         self.refresh()
 
-    def write(self, text: str) -> bool:
-        if not text:
-            return False
-        folded_lines = self._folded_lines
-
+    def _handle_ansi_command(self, ansi_command: ANSICommand) -> bool:
         added_content = False
-        for ansi_token in self._ansi_stream.feed(text):
-            (
+        folded_lines = self._folded_lines
+        match ansi_command:
+            case ANSICursor(
                 delta_x,
                 delta_y,
                 absolute_x,
                 absolute_y,
                 content,
                 replace,
-            ) = ansi_token
-            while self.cursor_line >= len(folded_lines):
-                self.add_line(Content())
+            ):
+                if self.cursor_line >= len(folded_lines):
+                    while self.cursor_line >= len(folded_lines):
+                        self.add_line(Content())
+                        added_content = True
 
-            folded_line = folded_lines[self.cursor_line]
-            line = self._lines[folded_line.line_no]
+                folded_line = folded_lines[self.cursor_line]
+                previous_content = folded_line.content
+                line = self._lines[folded_line.line_no]
+                if delta_y or absolute_y:
+                    # If we are moving the cursor, simplify the line (reduce segments)
+                    line.content.simplify()
 
-            if content is not None:
-                cursor_line_offset = self.cursor_line_offset
+                if content is not None:
+                    cursor_line_offset = self.cursor_line_offset
 
-                if replace is not None:
-                    start_replace, end_replace = ansi_token.get_replace_offsets(
-                        cursor_line_offset, len(line.content)
-                    )
-                    updated_line = Content.assemble(
-                        line.content[:start_replace],
-                        content,
-                        line.content[end_replace + 1 :],
-                    )
-
-                else:
-                    if cursor_line_offset == len(line.content):
-                        updated_line = line.content + content
-                    else:
-                        updated_line = Content.assemble(
-                            line.content[:cursor_line_offset],
-                            content,
-                            line.content[cursor_line_offset + len(content) :],
+                    if replace is not None:
+                        start_replace, end_replace = ansi_command.get_replace_offsets(
+                            cursor_line_offset, len(line.content)
                         )
-                self.update_line(folded_line.line_no, updated_line)
+                        updated_line = Content.assemble(
+                            line.content[:start_replace],
+                            content,
+                            line.content[end_replace + 1 :],
+                        )
+
+                    else:
+                        if cursor_line_offset == len(line.content):
+                            updated_line = line.content + content
+                        else:
+                            updated_line = Content.assemble(
+                                line.content[:cursor_line_offset],
+                                content,
+                                line.content[cursor_line_offset + len(content) :],
+                            )
+
+                    self.update_line(folded_line.line_no, updated_line)
+                    if not previous_content.is_same(folded_line.content):
+                        added_content = True
+
+                if delta_x is not None:
+                    self.cursor_offset += delta_x
+                    while self.cursor_offset > self._width:
+                        self.cursor_line += 1
+                        self.cursor_offset -= self._width
+                if delta_y is not None:
+                    self.cursor_line = max(0, self.cursor_line + delta_y)
+                if absolute_x is not None:
+                    self.cursor_offset = absolute_x
+                if absolute_y is not None:
+                    self.cursor_line = max(0, absolute_y)
+            case ANSIWorkingDirectory(path):
+                self.current_directory = path
+                self.finalize()
+
+        return added_content
+
+    def write(self, text: str) -> bool:
+        """Write to the log.
+
+        Args:
+            text: New text (and escape sequences).
+
+        Returns:
+            `True` if the log output changed, otherwise `False`.
+        """
+        if not text:
+            return False
+
+        if self._finalized:
+            return False
+
+        added_content = False
+        for ansi_command in self._ansi_stream.feed(text):
+            if self._handle_ansi_command(ansi_command):
                 added_content = True
 
-            if delta_x is not None:
-                self.cursor_offset += delta_x
-                while self.cursor_offset > self._width:
-                    self.cursor_line += 1
-                    self.cursor_offset -= self._width
-            if delta_y is not None:
-                self.cursor_line = max(0, self.cursor_line + delta_y)
-            if absolute_x is not None:
-                self.cursor_offset = absolute_x
-            if absolute_y is not None:
-                self.cursor_line = max(0, absolute_y)
         return added_content
 
     def _fold_line(self, line_no: int, line: Content, width: int) -> list[LineFold]:
@@ -291,15 +338,17 @@ class ANSILog(ScrollView, can_focus=False):
         width = self._width
         line_record = LineRecord(content, self._fold_line(line_no, content, width))
         self._lines.append(line_record)
-        # if not width:
-        #     return
         folds = line_record.folds
         self._line_to_fold.append(len(self._folded_lines))
         self._folded_lines.extend(folds)
+        self._update_virtual_size()
 
-    def update_line(self, line_index: int, line: Content) -> None:
+    def _add_new_lines(self, line_index: int) -> None:
         while line_index >= len(self._lines):
             self.add_line(Content())
+
+    def update_line(self, line_index: int, line: Content) -> None:
+        self._add_new_lines(line_index)
 
         line_expanded_tabs = line.expand_tabs(8)
         self.max_line_width = max(line_expanded_tabs.cell_length, self.max_line_width)
@@ -325,11 +374,7 @@ class ANSILog(ScrollView, can_focus=False):
                 self._folded_lines.append(fold)
                 refresh_lines += 1
 
-        self.refresh(Region(0, line_no, self._width, refresh_lines))
-
-    def on_idle(self):
-        self._update_width()
-        self._update_virtual_size()
+        self.refresh(Region(0, line_index, self._width, refresh_lines))
 
     def render_line(self, y: int) -> Strip:
         scroll_x, scroll_y = self.scroll_offset
@@ -379,7 +424,6 @@ class ANSILog(ScrollView, can_focus=False):
             self._render_line_cache[cache_key] = strip
         strip = strip.crop_extend(x, x + width, rich_style)
         strip = strip.apply_offsets(x + offset, line_no)
-
         return strip
 
 

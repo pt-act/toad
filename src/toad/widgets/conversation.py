@@ -1,322 +1,68 @@
 from __future__ import annotations
 
-
-from functools import cached_property
-from typing import TYPE_CHECKING
+from asyncio import Future
+import asyncio
+from operator import attrgetter
+import platform
+from typing import TYPE_CHECKING, Literal
 from pathlib import Path
+from time import monotonic
 
-from textual import on, work
+from typing import Callable, Any
+
+from textual import log, on, work
 from textual.app import ComposeResult
 from textual import containers
 from textual import getters
 from textual import events
+from textual.actions import SkipAction
 from textual.binding import Binding
+from textual.content import Content
+from textual.css.query import NoMatches
 from textual.widget import Widget
 from textual.widgets import Static
-from textual.widgets.markdown import MarkdownBlock, MarkdownFence
-from textual.geometry import Offset
-from textual.reactive import var, Initialize
+from textual.widgets.markdown import MarkdownBlock
+from textual.geometry import Offset, Spacing
+from textual.reactive import var
 from textual.layouts.grid import GridLayout
+from textual.layout import WidgetPlacement
 
 
-import llm
-
-from toad import messages
+from toad import jsonrpc, messages
+from toad.acp import messages as acp_messages
 from toad.app import ToadApp
+from toad.acp import protocol as acp_protocol
+from toad.acp.agent import Mode
+from toad.answer import Answer
+from toad.agent import AgentBase, AgentReady, AgentFail
+from toad.widgets.flash import Flash
 from toad.widgets.menu import Menu
 from toad.widgets.note import Note
 from toad.widgets.prompt import Prompt
 from toad.widgets.throbber import Throbber
 from toad.widgets.user_input import UserInput
 from toad.widgets.explain import Explain
-from toad.widgets.highlighted_textarea import HighlightedTextArea
-from toad.shell import Shell, CurrentWorkingDirectoryChanged
+from toad.shell import Shell, CurrentWorkingDirectoryChanged, ShellFinished
 from toad.slash_command import SlashCommand
 from toad.protocol import BlockProtocol, MenuProtocol
-
-
-from toad.menus import CONVERSATION_MENUS, MenuItem
+from toad.menus import MenuItem
 
 if TYPE_CHECKING:
     from toad.widgets.ansi_log import ANSILog
-
-MD = """\
-# Textual Markdown Browser - Demo
-
-This Markdown file contains some examples of Markdown widgets.
-
-## Headers
-
-Headers levels 1 through 6 are supported.
-
-### This is H3
-
-This is H3 Content
-
-#### This is H4
-
-Header level 4 content. Drilling down into finer headings.
-
-##### This is H5
-
-Header level 5 content.
-
-###### This is H6
-
-Header level 6 content.
-
-## Typography
-
-The usual Markdown typography is supported. The exact output depends on your terminal, although most are fairly consistent.
-
-### Emphasis
-
-Emphasis is rendered with `*asterisks*`, and looks *like this*;
-
-### Strong
-
-Use two asterisks to indicate strong which renders in bold, e.g. `**strong**` render **strong**.
-
-### Strikethrough
-
-Two tildes indicates strikethrough, e.g. `~~cross out~~` render ~~cross out~~.
-
-### Inline code ###
-
-Inline code is indicated by backticks. e.g. `import this`.
-
-## Horizontal rule
-
-Draw a horizontal rule with three dashes (`---`).
-
----
-
-Good for natural breaks in the content, that don't require another header.
-
-[like this][example]
-
-## Lists
-
-1. Lists can be ordered
-2. Lists can be unordered
-   - I must not fear.
-     - Fear is the mind-killer.
-       - Fear is the little-death that brings total obliteration.
-         - I will face my fear.
-           - I will permit it to pass over me and through me.
-     - And when it has gone past, I will turn the inner eye to see its path.
-   - Where the fear has gone there will be nothing. Only I will remain.
-
-[example]: example.com
-   
-### Longer list
-
-1. **Duke Leto I Atreides**, head of House Atreides
-2. **Lady Jessica**, Bene Gesserit and concubine of Leto, and mother of Paul and Alia
-3. **Paul Atreides**, son of Leto and Jessica
-4. **Alia Atreides**, daughter of Leto and Jessica
-5. **Gurney Halleck**, troubadour warrior of House Atreides
-6. **Thufir Hawat**, Mentat and Master of Assassins of House Atreides
-7. **Duncan Idaho**, swordmaster of House Atreides
-8. **Dr. Wellington Yueh**, Suk doctor of House Atreides
-9. **Leto**, first son of Paul and Chani who dies as a toddler
-10. **Esmar Tuek**, a smuggler on Arrakis
-11. **Staban Tuek**, son of Esmar
-
-## Fences
-
-Fenced code blocks are introduced with three back-ticks and the optional parser. Here we are rendering the code in a sub-widget with syntax highlighting and indent guides.
-
-In the future I think we could add controls to export the code, copy to the clipboard. Heck, even run it and show the output?
-
-```python
-@lru_cache(maxsize=1024)
-def split(self, cut_x: int, cut_y: int) -> tuple[Region, Region, Region, Region]:
-    \"\"\"Split a region into 4 from given x and y offsets (cuts).
-
-    ```
-                cut_x ↓
-            ┌────────┐ ┌───┐
-            │        │ │   │
-            │    0   │ │ 1 │
-            │        │ │   │
-    cut_y → └────────┘ └───┘
-            ┌────────┐ ┌───┐
-            │    2   │ │ 3 │
-            └────────┘ └───┘
-    ```
-
-    Args:
-        cut_x (int): Offset from self.x where the cut should be made. If negative, the cut
-            is taken from the right edge.
-        cut_y (int): Offset from self.y where the cut should be made. If negative, the cut
-            is taken from the lower edge.
-
-    Returns:
-        tuple[Region, Region, Region, Region]: Four new regions which add up to the original (self).
-    \"\"\"
-
-    x, y, width, height = self
-    if cut_x < 0:
-        cut_x = width + cut_x
-    if cut_y < 0:
-        cut_y = height + cut_y
-
-    _Region = Region
-    return (
-        _Region(x, y, cut_x, cut_y),
-        _Region(x + cut_x, y, width - cut_x, cut_y),
-        _Region(x, y + cut_y, cut_x, height - cut_y),
-        _Region(x + cut_x, y + cut_y, width - cut_x, height - cut_y),
-    )
-```
-
-## Quote
-
-Quotes are introduced with a chevron, and render like this:
-
-> I must not fear.
-> Fear is the mind-killer.
-> Fear is the little-death that brings total obliteration.
-> I will face my fear.
-> I will permit it to pass over me and through me.
-> And when it has gone past, I will turn the inner eye to see its path.
-> Where the fear has gone there will be nothing. Only I will remain."
-
-Quotes nest nicely. Here's what quotes within quotes look like:
-
-> I must not fear.
-> > Fear is the mind-killer.
-> > Fear is the little-death that brings total obliteration.
-> > I will face my fear.
-> > > I will permit it to pass over me and through me.
-> > > And when it has gone past, I will turn the inner eye to see its path.
-> > > Where the fear has gone there will be nothing. Only I will remain.
-
-## Tables
-
-Tables are supported, and render as a Rich table.
-
-I would like to add controls to these widgets to export the table as CSV, which I think would be a nice feature. In the future we might also have sortable columns by clicking on the headers.
-
-
-| Name            | Type   | Default | Description                        |
-| --------------- | ------ | ------- | ---------------------------------- |
-| `show_header`   | `bool` | `True`  | Show the **table** header              |
-| `fixed_rows`    | `int`  | `0`     | Number of fixed rows               |
-| `fixed_columns` | `int`  | `0`     | Number of fixed columns            |
-| `zebra_stripes` | `bool` | `False` | Display alternating colors on rows |
-| `header_height` | `int`  | `1`     | Height of header row               |
-| `show_cursor`   | `bool` | `True`  | Show a cell cursor                 |
-"""
-
-# MD = """
-# ## Tables
-
-# Tables are supported, and render as a Rich table.
-
-# I would like to add controls to these widgets to export the table as CSV, which I think would be a nice feature. In the future we might also have sortable columns by clicking on the headers.
-
-# `FOO`
-
-# | Name            | Type   | Default | Description                        |
-# | --------------- | ------ | ------- | ---------------------------------- |
-# | `show_header`   | `bool` | `True`  | Show the **table** header              |
-# | `fixed_rows`    | `int`  | `0`     | Number of fixed rows               |
-# | `fixed_columns` | `int`  | `0`     | Number of fixed columns            |
-# | `zebra_stripes` | `bool` | `False` | Display alternating colors on rows |
-# | `header_height` | `int`  | `1`     | Height of header row               |
-# | `show_cursor`   | `bool` | `True`  | Show a cell cursor                 |
-# """
-
-# MD = """
-# ```python
-# for n in range(10):
-#     print(n)
-# """
-
-# MD = """
-# 1. Lists can be ordered
-# 2. Lists can be `unordered`
-#    - I must not *fear*.
-#      - Fear is the `mind-killer`.
-#        - Fear is the little-death that brings total obliteration.
-#          - I will face my fear.
-#            - I will permit it to pass over me and through me.
-#      - And when it has gone past, I will turn the inner eye to see its path.
-#    - Where the fear has gone there will be nothing. Only I will remain.
-# """
-
-MD = """
-```python
-def mandelbrot(c: complex, max_iter: int) -> int:
-    \"\"\"Determine the number of iterations for a point in the Mandelbrot set.
-
-    Args:
-        c (complex): The complex point to test.
-        max_iter (int): The maximum number of iterations to test.
-
-    Returns:
-        int: Number of iterations before escape or max_iter.
-    \"\"\"
-    z = 0 + 0j
-    for n in range(max_iter):
-        if abs(z) > 2:
-            return n
-        z = z * z + c
-    return max_iter
-
-def colorize(iter_count: int, max_iter: int) -> str:
-    \"\"\"Get an ANSI color code based on the iteration count.
-
-    Args:
-        iter_count (int): Number of iterations completed before escape.
-        max_iter (int): Maximum number of iterations allowed.
-
-    Returns:
-        str: ANSI escape code for color.
-    \"\"\"
-    if iter_count == max_iter:
-        return "\\033[48;5;0m"  # Black background for points in the set
-    else:
-        # Create a gradient from 17 to 231 (blue to red) for escaping points
-        color_code = 17 + int((iter_count / max_iter) * 214)
-        return f"\\033[48;5;{color_code}m"
-
-def draw_mandelbrot(width: int, height: int, max_iter: int) -> None:
-    \"\"\"Draw the Mandelbrot set in the terminal using ANSI colors.
-
-    Args:
-        width (int): Width of the output in terminal characters.
-        height (int): Height of the output in terminal rows.
-        max_iter (int): Maximum number of iterations for Mandelbrot calculation.
-    \"\"\"
-    for y in range(height):
-        for x in range(width):
-            # Map the (x, y) pixel to a point in the complex plane
-            real = (x / width) * 3.5 - 2.5
-            imag = (y / height) * 2.0 - 1.0
-            c = complex(real, imag)
-            
-            # Calculate the number of iterations
-            iter_count = mandelbrot(c, max_iter)
-            
-            # Get the color for this point and print a space (box)
-            color = colorize(iter_count, max_iter)
-            print(f"{color}  ", end="")
-
-        # Reset color and move to the next line
-        print("\\033[0m")
-
-# Configuration for drawing
-width = 80    # Number of characters wide
-height = 40   # Number of character rows
-max_iter = 100  # Maximum iterations for Mandelbrot calculation
-
-# Draw the Mandelbrot set
-draw_mandelbrot(width, height, max_iter)
-```
-"""
+    from toad.widgets.agent_response import AgentResponse
+    from toad.widgets.agent_thought import AgentThought
+    from toad.widgets.terminal import Terminal
+
+
+class Loading(Static):
+    """Tiny widget to show loading indicator."""
+
+    DEFAULT_CLASSES = "block"
+    DEFAULT_CSS = """
+    Loading {
+        height: auto;        
+    }
+    """
 
 
 class Cursor(Static):
@@ -329,7 +75,7 @@ class Cursor(Static):
         self.set_interval(0.4, self._update_follow)
 
     def _update_blink(self) -> None:
-        if self.query_ancestor(Window).has_focus:
+        if self.query_ancestor(Window).has_focus and self.screen.is_active:
             self.blink = not self.blink
         else:
             self.blink = True
@@ -361,7 +107,16 @@ class Cursor(Static):
 
 
 class Contents(containers.VerticalGroup, can_focus=False):
-    pass
+    def process_layout(
+        self, placements: list[WidgetPlacement]
+    ) -> list[WidgetPlacement]:
+        if placements:
+            last_placement = placements[-1]
+            top, right, bottom, left = last_placement.margin
+            placements[-1] = last_placement._replace(
+                margin=Spacing(top, right, 0, left)
+            )
+        return placements
 
 
 class ContentsGrid(containers.Grid):
@@ -372,34 +127,37 @@ class ContentsGrid(containers.Grid):
 
 class Window(containers.VerticalScroll):
     BINDING_GROUP_TITLE = "View"
-    BINDINGS = [Binding("end", "screen.focus_prompt", "Focus prompt")]
+    BINDINGS = [Binding("end", "screen.focus_prompt", "Prompt")]
 
 
 class Conversation(containers.Vertical):
     BINDING_GROUP_TITLE = "Conversation"
-    CURSOR_BINDING_GROUP = Binding.Group(description="Block cursor")
+    CURSOR_BINDING_GROUP = Binding.Group(description="Cursor")
     BINDINGS = [
         Binding(
             "alt+up",
             "cursor_up",
-            "Block up",
+            "Block cursor up",
             priority=True,
             group=CURSOR_BINDING_GROUP,
         ),
         Binding(
             "alt+down",
             "cursor_down",
-            "Block down",
+            "Block cursor down",
             group=CURSOR_BINDING_GROUP,
         ),
-        Binding("enter", "select_block", "Select"),
-        Binding("escape", "dismiss", "Dismiss", show=False),
-        Binding("f2,ctrl+comma", "settings", "Settings"),
+        Binding("enter", "select_block", "Select", tooltip="Select this block"),
+        Binding("escape", "cancel", "Cancel", tooltip="Cancel agent's turn"),
+        Binding("ctrl+m", "mode_switcher", "Modes", tooltip="Open the mode switcher"),
+        Binding("ctrl+comma,f2", "settings", "Settings", tooltip="Settings screen"),
+        Binding("ctrl+c", "interrupt", "Interrupt", tooltip="interrupt"),
     ]
 
     busy_count = var(0)
     cursor_offset = var(-1, init=False)
     project_path = var(Path("./").expanduser().absolute())
+    working_directory: var[str] = var("")
     _blocks: var[list[MarkdownBlock] | None] = var(None)
 
     throbber: getters.query_one[Throbber] = getters.query_one("#throbber")
@@ -408,11 +166,31 @@ class Conversation(containers.Vertical):
     cursor = getters.query_one(Cursor)
     prompt = getters.query_one(Prompt)
     app = getters.app(ToadApp)
+    _shell: var[Shell | None] = var(None)
 
-    def create_shell(self) -> Shell:
-        return Shell(self)
+    agent: var[AgentBase | None] = var(None, bindings=True)
+    agent_info: var[Content] = var(Content())
+    agent_ready: var[bool] = var(False)
+    modes: var[dict[str, Mode]] = var({}, bindings=True)
+    current_mode: var[Mode | None] = var(None)
+    turn: var[Literal["agent", "client"] | None] = var(None, bindings=True)
 
-    shell: var[Shell] = var(Initialize(create_shell))
+    def __init__(self, project_path: Path) -> None:
+        super().__init__()
+
+        project_path = project_path.resolve().absolute()
+        # self.project_path = project_path
+        # self.working_directory = str(project_path)
+        self.set_reactive(Conversation.project_path, project_path)
+        self.set_reactive(Conversation.working_directory, str(project_path))
+        self.agent_slash_commands: list[SlashCommand] = []
+        self.slash_command_hints: dict[str, str] = {}
+        self.terminals: dict[str, Terminal] = {}
+        self._loading: Loading | None = None
+        self._agent_response: AgentResponse | None = None
+        self._agent_thought: AgentThought | None = None
+        self._ansi_log: ANSILog | None = None
+        self._last_escape_time: float = monotonic()
 
     def compose(self) -> ComposeResult:
         yield Throbber(id="throbber")
@@ -421,11 +199,65 @@ class Conversation(containers.Vertical):
                 with containers.VerticalGroup(id="cursor-container"):
                     yield Cursor()
                 yield Contents(id="contents")
-        yield Prompt().data_bind(project_path=Conversation.project_path)
+        yield Flash()
+        yield Prompt().data_bind(
+            project_path=Conversation.project_path,
+            working_directory=Conversation.working_directory,
+            agent_info=Conversation.agent_info,
+            agent_ready=Conversation.agent_ready,
+            current_mode=Conversation.current_mode,
+            modes=Conversation.modes,
+        )
 
-    @cached_property
-    def conversation(self) -> llm.Conversation:
-        return llm.get_model(self.app.settings.get("llm.model", str)).conversation()
+    @on(messages.Flash)
+    def on_flash(self, event: messages.Flash) -> None:
+        event.stop()
+        self.flash(event.content, duration=event.duration, style=event.style)
+
+    def flash(
+        self,
+        content: str | Content,
+        *,
+        duration: float | None = None,
+        style: Literal["default", "warning", "error", "success"] = "default",
+    ) -> None:
+        """Flash a single-line message to the user.
+
+        Args:
+            content: Content to flash.
+            style: A semantic style.
+            duration: Duration in seconds of the flash, or `None` to use default in settings.
+        """
+        self.query_one(Flash).flash(content, duration=duration, style=style)
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "mode_switcher":
+            return bool(self.modes)
+        if action == "cancel":
+            return True if (self.agent and self.turn == "agent") else None
+        return True
+
+    async def post_agent_response(self, fragment: str = "") -> AgentResponse:
+        """Get or create an agent response widget."""
+        from toad.widgets.agent_response import AgentResponse
+
+        if self._agent_response is None:
+            self._agent_response = agent_response = AgentResponse(fragment)
+            await self.post(agent_response)
+        else:
+            await self._agent_response.append_fragment(fragment)
+        return self._agent_response
+
+    async def post_agent_thought(self, thought_fragment: str) -> AgentThought:
+        """Get or create an agent thought widget."""
+        from toad.widgets.agent_thought import AgentThought
+
+        if self._agent_thought is None:
+            self._agent_thought = AgentThought(thought_fragment)
+            await self.post(self._agent_thought)
+        else:
+            await self._agent_thought.append_fragment(thought_fragment)
+        return self._agent_thought
 
     @property
     def cursor_block(self) -> Widget | None:
@@ -454,12 +286,24 @@ class Conversation(containers.Vertical):
             block_type: The expected type.
 
         Returns:
-            _type_: The instance or `None` if not selected, or wrong type.
+            The widget next to the cursor, or `None` if the types don't match.
         """
         cursor_block = self.cursor_block_child
         if isinstance(cursor_block, block_type):
             return cursor_block
         return None
+
+    @on(AgentReady)
+    def on_agent_ready(self) -> None:
+        self.agent_ready = True
+        if self.agent is not None:
+            content = Content.assemble(self.agent.get_info(), " connected")
+            self.flash(content, style="success")
+
+    @on(AgentFail)
+    def on_agent_fail(self, message: AgentFail) -> None:
+        self.agent_ready = True
+        self.notify(message.message, title="Agent failure", severity="error", timeout=5)
 
     @on(messages.WorkStarted)
     def on_work_started(self) -> None:
@@ -468,6 +312,29 @@ class Conversation(containers.Vertical):
     @on(messages.WorkFinished)
     def on_work_finished(self) -> None:
         self.busy_count -= 1
+
+    @work
+    @on(messages.ChangeMode)
+    async def on_change_mode(self, event: messages.ChangeMode) -> None:
+        if (agent := self.agent) is None:
+            return
+        if event.mode_id is None:
+            self.current_mode = None
+        else:
+            if (error := await agent.set_mode(event.mode_id)) is not None:
+                self.notify(error, title="Set Mode", severity="error")
+            elif (new_mode := self.modes.get(event.mode_id)) is not None:
+                self.current_mode = new_mode
+                self.flash(
+                    Content.from_markup("Mode changed to [b]$mode", mode=new_mode.name),
+                    style="success",
+                )
+
+    @on(acp_messages.ModeUpdate)
+    def on_mode_update(self, event: acp_messages.ModeUpdate) -> None:
+        if (modes := self.modes) is not None:
+            if (mode := modes.get(event.current_mode)) is not None:
+                self.current_mode = mode
 
     @on(messages.UserInputSubmitted)
     async def on_user_input_submitted(self, event: messages.UserInputSubmitted) -> None:
@@ -478,87 +345,437 @@ class Conversation(containers.Vertical):
             if text.startswith("/"):
                 await self.slash_command(text)
             else:
-                from toad.widgets.agent_response import AgentResponse
-
                 await self.post(UserInput(text))
+                self._loading = await self.post(Loading("Please wait..."), loading=True)
+                await asyncio.sleep(0)
+                self.send_prompt_to_agent(text)
 
-                agent_response = AgentResponse(self.conversation)
-                await self.post(agent_response)
-                agent_response.send_prompt(
-                    event.body,
-                    Path(self.prompt.current_directory.path).expanduser().absolute(),
-                )
+    @work
+    async def send_prompt_to_agent(self, prompt: str) -> None:
+        if self.agent is not None:
+            stop_reason: str | None = None
+            self.busy_count += 1
+            try:
+                self.turn = "agent"
+                stop_reason = await self.agent.send_prompt(prompt)
+            except jsonrpc.APIError:
+                self.turn = "client"
+            finally:
+                self.busy_count -= 1
+            self.call_later(self.agent_turn_over, stop_reason)
+
+    async def agent_turn_over(self, stop_reason: str | None) -> None:
+        """Called when the agent's turn is over.
+
+        Args:
+            stop_reason: The stop reason returned from the Agent, or `None`.
+        """
+        if self._agent_thought is not None and self._agent_thought.loading:
+            await self._agent_thought.remove()
+
+        self.turn = "client"
+        if self._agent_thought is not None and self._agent_thought.loading:
+            await self._agent_thought.remove()
+        if self._loading is not None:
+            await self._loading.remove()
+        self._agent_response = None
+        self._agent_thought = None
 
     @on(Menu.OptionSelected)
     async def on_menu_option_selected(self, event: Menu.OptionSelected) -> None:
-        self.window.focus(scroll_visible=False)
         await event.menu.remove()
-
+        self.window.focus(scroll_visible=False)
         if event.action is not None:
-            await self.run_action(event.action, {"block": event.owner})
-        # await event.menu.remove()
-        # self.cursor.visible = True
-
-    # @on(events.DescendantFocus)
-    # def on_descendant_focus(self, event: events.DescendantFocus):
-    #     if isinstance(event.widget, HighlightedTextArea):
-    #         self.cursor_offset = -1
-
-    # @on(events.DescendantBlur)
-    # def on_descendant_blur(self, event: events.DescendantBlur):
-    #     if isinstance(event.widget, Window):
-    #         self.cursor.visible = False
+            self.call_after_refresh(
+                self.run_action, event.action, {"block": event.owner}
+            )
 
     @on(Menu.Dismissed)
     async def on_menu_dismissed(self, event: Menu.Dismissed) -> None:
         event.stop()
-        # self.cursor.visible = True
-
-        # with self.window.prevent(events.DescendantFocus):
-        #     self.window.focus(scroll_visible=False)
-
         self.window.focus(scroll_visible=False)
         await event.menu.remove()
-        # self.cursor.visible = True
 
     @on(CurrentWorkingDirectoryChanged)
     def on_current_working_directory_changed(
         self, event: CurrentWorkingDirectoryChanged
     ) -> None:
-        self.prompt.current_directory.path = event.path
+        if self._ansi_log is not None:
+            self._ansi_log.finalize()
+        self.working_directory = str(Path(event.path).resolve().absolute())
+        # self.prompt.current_directory.path = event.path
+
+    @on(ShellFinished)
+    def on_shell_finished(self) -> None:
+        if self._ansi_log is not None:
+            self._ansi_log.finalize()
 
     def watch_busy_count(self, busy: int) -> None:
         self.throbber.set_class(busy > 0, "-busy")
 
-    async def on_mount(self) -> None:
-        self.prompt.focus()
-        self.prompt.slash_commands = [
-            SlashCommand("/about", "About Toad"),
-            SlashCommand("/help", "Open Help"),
-            SlashCommand("/set", "Change a setting"),
+    @on(acp_messages.Update)
+    async def on_acp_agent_message(self, message: acp_messages.Update):
+        message.stop()
+        self._agent_thought = None
+        await self.post_agent_response(message.text)
+
+    @on(acp_messages.Thinking)
+    async def on_acp_agent_thinking(self, message: acp_messages.Thinking):
+        message.stop()
+        await self.post_agent_thought(message.text)
+
+    @on(acp_messages.RequestPermission)
+    async def on_acp_request_permission(self, message: acp_messages.RequestPermission):
+        message.stop()
+        options = [
+            Answer(
+                option["name"],
+                option["optionId"],
+            )
+            for option in message.options
         ]
-        self.call_after_refresh(self.post_welcome)
-        self.app.settings_changed_signal.subscribe(self, self._settings_changed)
-        self.start_shell()
+        self.request_permissions(
+            message.result_future,
+            options,
+            message.tool_call,
+        )
+        self._agent_response = None
+        self._agent_thought = None
+
+    @on(acp_messages.Plan)
+    async def on_acp_plan(self, message: acp_messages.Plan):
+        message.stop()
+        from toad.widgets.plan import Plan
+
+        entries = [
+            Plan.Entry(
+                Content(entry["content"]),
+                entry.get("priority", "medium"),
+                entry.get("status", "pending"),
+            )
+            for entry in message.entries
+        ]
+
+        if self.contents.children and isinstance(
+            (current_plan := self.contents.children[-1]), Plan
+        ):
+            current_plan.entries = entries
+        else:
+            await self.post(Plan(entries))
+
+    @on(acp_messages.ToolCallUpdate)
+    @on(acp_messages.ToolCall)
+    async def on_acp_tool_call_update(
+        self, message: acp_messages.ToolCall | acp_messages.ToolCallUpdate
+    ):
+        from toad.widgets.tool_call import ToolCall
+
+        tool_call = message.tool_call
+
+        if tool_call.get("status", None) in (None, "completed"):
+            self._agent_thought = None
+            self._agent_response = None
+
+        tool_id = message.tool_id
+        try:
+            existing_tool_call: ToolCall | None = self.contents.get_child_by_id(
+                tool_id, ToolCall
+            )
+        except NoMatches:
+            await self.post(ToolCall(tool_call, id=message.tool_id))
+        else:
+            existing_tool_call.tool_call = tool_call
+
+    @on(acp_messages.AvailableCommandsUpdate)
+    async def on_acp_available_commands_update(
+        self, message: acp_messages.AvailableCommandsUpdate
+    ):
+        slash_commands: list[SlashCommand] = []
+        for available_command in message.commands:
+            input = available_command.get("input", {}) or {}
+            slash_command = SlashCommand(
+                f"/{available_command['name']}",
+                available_command["description"],
+                hint=input.get("hint"),
+            )
+            slash_commands.append(slash_command)
+        self.agent_slash_commands = slash_commands
+        self.update_slash_commands()
+
+    def get_terminal(self, terminal_id: str) -> Terminal | None:
+        """Get a terminal from its id.
+
+        Args:
+            terminal_id: ID of the terminal.
+
+        Returns:
+            Terminal instance, or `None` if no terminal was found.
+        """
+        from toad.widgets.terminal import Terminal
+
+        try:
+            terminal = self.contents.query_one(f"#{terminal_id}", Terminal)
+        except NoMatches:
+            return None
+        if terminal.released:
+            return None
+        return terminal
+
+    async def action_interrupt(self) -> None:
+        if self._ansi_log is not None and not self._ansi_log.is_finalized:
+            await self.shell.interrupt()
+            self._shell = None
+            self.flash("Command interrupted", style="success")
+        else:
+            raise SkipAction()
 
     @work
-    async def start_shell(self) -> None:
-        await self.shell.run()
+    @on(acp_messages.CreateTerminal)
+    async def on_acp_create_terminal(self, message: acp_messages.CreateTerminal):
+        from toad.widgets.terminal import Terminal, Command
+
+        command = Command(
+            message.command,
+            message.args or [],
+            message.env or {},
+            message.cwd or str(self.project_path),
+        )
+        width = self.window.size.width - 5 - self.window.styles.scrollbar_size_vertical
+        height = self.window.scrollable_content_region.height - 2
+
+        terminal = Terminal(
+            command,
+            output_byte_limit=message.output_byte_limit,
+            id=message.terminal_id,
+            minimum_terminal_width=width,
+        )
+        self.terminals[message.terminal_id] = terminal
+        terminal.display = False
+
+        try:
+            await terminal.start(width, height)
+        except Exception as error:
+            log(str(error))
+            message.result_future.set_result(False)
+            return
+
+        try:
+            await self.post(terminal)
+        except Exception:
+            message.result_future.set_result(False)
+        else:
+            message.result_future.set_result(True)
+
+    @on(acp_messages.KillTerminal)
+    async def on_acp_kill_terminal(self, message: acp_messages.KillTerminal):
+        if (terminal := self.get_terminal(message.terminal_id)) is not None:
+            terminal.kill()
+
+    @on(acp_messages.GetTerminalState)
+    def on_acp_get_terminal_state(self, message: acp_messages.GetTerminalState):
+        if (terminal := self.get_terminal(message.terminal_id)) is None:
+            message.result_future.set_exception(
+                KeyError(f"No terminal with id {message.terminal_id!r}")
+            )
+        else:
+            message.result_future.set_result(terminal.state)
+
+    @on(acp_messages.ReleaseTerminal)
+    def on_acp_terminal_release(self, message: acp_messages.ReleaseTerminal):
+        if (terminal := self.get_terminal(message.terminal_id)) is not None:
+            terminal.kill()
+            terminal.release()
+
+    @work
+    @on(acp_messages.WaitForTerminalExit)
+    async def on_acp_wait_for_terminal_exit(
+        self, message: acp_messages.WaitForTerminalExit
+    ):
+        if (terminal := self.get_terminal(message.terminal_id)) is None:
+            message.result_future.set_exception(
+                KeyError(f"No terminal with id {message.terminal_id!r}")
+            )
+        else:
+            return_code, signal = await terminal.wait_for_exit()
+            message.result_future.set_result((return_code or 0, signal))
+
+    def set_mode(self, mode_id: str) -> bool:
+        """Set the mode give its id (if it exists).
+
+        Args:
+            mode_id: Id of mode.
+
+        Returns:
+            `True` if the mode was changed, `False` if it didn't exist.
+        """
+        if (mode := self.modes.get(mode_id)) is not None:
+            self.current_mode = mode
+            return True
+        return False
+
+    @on(acp_messages.SetModes)
+    async def on_acp_set_modes(self, message: acp_messages.SetModes):
+        self.modes = message.modes
+        self.current_mode = self.modes[message.current_mode]
+
+    @work
+    async def request_permissions(
+        self,
+        result_future: Future[Answer],
+        options: list[Answer],
+        tool_call_update: acp_protocol.ToolCallUpdatePermissionRequest,
+    ) -> None:
+        kind = tool_call_update.get("kind")
+
+        title: str | None = None
+        if kind is None:
+            from toad.widgets.tool_call import ToolCall
+
+            if (contents := tool_call_update.get("content")) is not None:
+                title = tool_call_update.get("title")
+                for content in contents:
+                    match content:
+                        case {"type": "text", "content": {"text": text}}:
+                            await self.post(ToolCall(text))
+
+            def answer_callback(answer: Answer) -> None:
+                result_future.set_result(answer)
+
+            self.ask(options, title or "", answer_callback)
+            return
+
+        if kind == "edit":
+            from toad.screens.permissions import PermissionsScreen
+
+            async def populate(screen: PermissionsScreen) -> None:
+                if (contents := tool_call_update.get("content")) is None:
+                    return
+                for content in contents:
+                    match content:
+                        case {
+                            "type": "diff",
+                            "oldText": old_text,
+                            "newText": new_text,
+                            "path": path,
+                        }:
+                            await screen.add_diff(path, path, old_text, new_text)
+
+            permissions_screen = PermissionsScreen(options, populate_callback=populate)
+            result = await self.app.push_screen_wait(permissions_screen)
+            result_future.set_result(result)
+        else:
+            title = tool_call_update.get("title", "") or ""
+
+            def answer_callback(answer: Answer) -> None:
+                result_future.set_result(answer)
+
+            self.ask(options, title, answer_callback)
+
+    async def post_tool_call(
+        self, tool_call_update: acp_protocol.ToolCallUpdate
+    ) -> None:
+        if (contents := tool_call_update.get("content")) is None:
+            return
+
+        for content in contents:
+            match content:
+                case {
+                    "type": "diff",
+                    "oldText": old_text,
+                    "newText": new_text,
+                    "path": path,
+                }:
+                    await self.post_diff(path, old_text, new_text)
+
+    async def post_diff(self, path: str, before: str | None, after: str) -> None:
+        """Post a diff view.
+
+        Args:
+            path: Path to the file.
+            before: Content of file before edit.
+            after: Content of file after edit.
+        """
+        from toad.widgets.diff_view import DiffView
+
+        diff_view = DiffView(path, path, before or "", after, classes="block")
+        diff_view_setting = self.app.settings.get("diff.view", str)
+        diff_view.split = diff_view_setting == "split"
+        diff_view.auto_split = diff_view_setting == "auto"
+        await self.post(diff_view)
+
+    def ask(
+        self,
+        options: list[Answer],
+        question: str = "",
+        callback: Callable[[Answer], Any] | None = None,
+    ) -> None:
+        """Replace the prompt with a dialog to ask a question
+
+        Args:
+            question: Question to ask or empty string to omit.
+            options: A list of (ANSWER, ANSWER_ID) tuples.
+            callback: Optional callable that will be invoked with the result.
+        """
+        from toad.widgets.question import Ask
+
+        self.prompt.ask(Ask(question, options, callback))
+
+    def _build_slash_commands(self) -> list[SlashCommand]:
+        slash_commands = [
+            SlashCommand("/about", "About Toad"),
+        ]
+        slash_commands.extend(self.agent_slash_commands)
+        slash_commands.sort(key=attrgetter("command"))
+
+        self.slash_command_hints = {
+            slash_command.command: slash_command.hint
+            for slash_command in slash_commands
+            if slash_command.hint
+        }
+
+        return slash_commands
+
+    def update_slash_commands(self) -> None:
+        """Update slash commands, which may have changed since mounting."""
+        self.prompt.slash_commands = self._build_slash_commands()
+
+    async def on_mount(self) -> None:
+        self.prompt.focus()
+        self.prompt.slash_commands = self._build_slash_commands()
+        self.call_after_refresh(self.post_welcome)
+        self.app.settings_changed_signal.subscribe(self, self._settings_changed)
+        # self.shell.start()
+
+        if self.app.acp_command:
+
+            def start_agent():
+                from toad.acp.agent import Agent
+
+                assert self.app.acp_command is not None
+                self.agent = Agent(self.project_path, self.app.acp_command)
+                self.agent.start(self)
+
+            self.call_after_refresh(start_agent)
+
+        else:
+            self.agent_ready = True
 
     def _settings_changed(self, setting_item: tuple[str, str]) -> None:
         key, value = setting_item
-        if key == "llm.model":
-            self.conversation = llm.get_model(value).conversation()
+        # if key == "llm.model":
+        #     self.conversation = llm.get_model(value).conversation()
 
     @work
     async def post_welcome(self) -> None:
         # from toad.widgets.welcome import Welcome
 
         # await self.post(Welcome(classes="note", name="welcome"), anchor=False)
+
         await self.post(
-            Note(f"Settings read from [$text-success]'{self.app.settings_path}'"),
+            Note(f"project directory is [$text-success]'{self.project_path!s}'"),
             anchor=True,
         )
+
         notes_path = Path(__file__).parent / "../../../notes.md"
         from toad.widgets.markdown_note import MarkdownNote
 
@@ -566,18 +783,19 @@ class Conversation(containers.Vertical):
             MarkdownNote(notes_path.read_text(), name="read_text", classes="note")
         )
 
-        # from toad.widgets.agent_response import AgentResponse
-
-        # agent_response = AgentResponse(self.conversation)
-        # await self.post(agent_response)
-        # agent_response.update(MD)
+    def watch_agent(self, agent: AgentBase | None) -> None:
+        if agent is None:
+            self.agent_info = Content.styled("shell")
+        else:
+            self.agent_info = agent.get_info()
+            self.agent_ready = False
 
     def on_click(self, event: events.Click) -> None:
         widget = event.widget
         contents = self.contents
         if self.screen.get_selected_text():
             return
-        if widget is None:
+        if widget is None or widget.is_maximized:
             return
         if widget in contents.displayed_children:
             self.cursor_offset = contents.displayed_children.index(widget)
@@ -605,35 +823,66 @@ class Conversation(containers.Vertical):
         # event.stop()
 
     async def post[WidgetType: Widget](
-        self, widget: WidgetType, anchor: bool = True
+        self, widget: WidgetType, *, anchor: bool = True, loading: bool = False
     ) -> WidgetType:
-        self._blocks = None
+        if self._loading is not None:
+            await self._loading.remove()
         await self.contents.mount(widget)
+        widget.loading = loading
         if anchor:
             self.window.anchor()
         return widget
 
-    async def get_ansi_log(self, width: int) -> ANSILog:
+    async def new_ansi_log(self, width: int, display: bool = True) -> ANSILog:
+        """Create a new ANSI log.
+
+        Args:
+            width: Initial width of the ansi log.
+            display: Initial display.
+
+        Returns:
+            A new (mounted) ANSILog widget.
+        """
         from toad.widgets.ansi_log import ANSILog
 
-        if self.children and isinstance(self.children[-1], ANSILog):
-            ansi_log = self.children[-1]
-        else:
-            ansi_log = await self.post(ANSILog(minimum_terminal_width=width))
-            await ansi_log.wait_for_refresh()
+        if self._ansi_log is not None:
+            self._ansi_log.finalize()
+
+        ansi_log = ANSILog(minimum_terminal_width=width)
+        ansi_log.display = display
+        ansi_log = await self.post(ansi_log)
+        self._ansi_log = ansi_log
         return ansi_log
+
+    @property
+    def shell(self) -> Shell:
+        system = platform.system()
+        if system == "Darwin":
+            shell_command = self.app.settings.get("shell.macos.run", str, expand=False)
+            shell_start = self.app.settings.get("shell.macos.start", str, expand=False)
+        else:
+            shell_command = self.app.settings.get("shell.linux.run", str, expand=False)
+            shell_start = self.app.settings.get("shell.linux.start", str, expand=False)
+
+        if self._shell is None or self._shell.is_finished:
+            shell_directory = self.working_directory
+            self._shell = Shell(
+                self, shell_directory, shell=shell_command, start=shell_start
+            )
+            self._shell.start()
+        return self._shell
 
     async def post_shell(self, command: str) -> None:
         from toad.widgets.shell_result import ShellResult
 
         if command.strip():
             await self.post(ShellResult(command))
-        self.call_after_refresh(
-            self.shell.send,
-            command,
-            self.scrollable_content_region.width - 5,
-            self.window.scrollable_content_region.height - 2,
-        )
+            self.call_after_refresh(
+                self.shell.send,
+                command,
+                self.window.size.width - 2 - self.window.styles.scrollbar_size_vertical,
+                self.window.scrollable_content_region.height - 4,
+            )
 
     def action_cursor_up(self) -> None:
         if not self.contents.displayed_children or self.cursor_offset == 0:
@@ -693,8 +942,17 @@ class Conversation(containers.Vertical):
                 cursor_block.block_cursor_down()
         self.refresh_block_cursor()
 
-    # def action_dismiss(self) -> None:
-    #     self.cursor_offset = -1
+    @work
+    async def action_cancel(self) -> None:
+        if monotonic() - self._last_escape_time < 3:
+            if (agent := self.agent) is not None:
+                if await agent.cancel():
+                    self.flash("Turn cancelled", style="success")
+                else:
+                    self.flash("Agent declined to cancel. Please wait.", style="error")
+        else:
+            self.flash("Press [b]esc[/] again to cancel agent's turn")
+            self._last_escape_time = monotonic()
 
     def focus_prompt(self) -> None:
         self.cursor_offset = -1
@@ -707,45 +965,51 @@ class Conversation(containers.Vertical):
             return
 
         menu_options = [
-            MenuItem("Copy to clipboard", "copy_to_clipboard", "c"),
-            MenuItem("Copy to prompt", "copy_to_prompt", "p"),
+            MenuItem("[u]C[/]opy to clipboard", "copy_to_clipboard", "c"),
+            MenuItem("Co[u]p[/u]y to prompt", "copy_to_prompt", "p"),
+            MenuItem("Open as S[u]V[/]G", "export_to_svg", "v"),
         ]
+
+        if block.allow_maximize:
+            menu_options.append(MenuItem("[u]M[/u]aximize", "maximize_block", "m"))
 
         if isinstance(block, MenuProtocol):
             menu_options.extend(block.get_block_menu())
             menu = Menu(block, menu_options)
 
-        elif isinstance(block, MarkdownBlock):
-            if block.name is None:
-                self.app.bell()
-                return
+            # elif isinstance(block, MarkdownBlock):
+            #     if block.name is None:
+            #         self.app.bell()
+            #         return
 
-            menu_options.append(
-                MenuItem("Explain this", "explain", "e"),
-            )
-            menu_options.extend(CONVERSATION_MENUS.get(block.name, []))
+            #     menu_options.append(
+            #         MenuItem("Explain this", "explain", "e"),
+            #     )
+            #     menu_options.extend(CONVERSATION_MENUS.get(block.name, []))
 
-            from toad.code_analyze import get_special_name_from_code
+            #     from toad.code_analyze import get_special_name_from_code
 
-            if (
-                block.name == "fence"
-                and isinstance(block, MarkdownFence)
-                and block.source
-            ):
-                for numeral, name in enumerate(
-                    get_special_name_from_code(block.source, block.lexer), 1
-                ):
-                    menu_options.append(
-                        MenuItem(
-                            f"Explain '{name}'", f"explain('{name}')", f"{numeral}"
-                        )
-                    )
+            #     if (
+            #         block.name == "fence"
+            #         and isinstance(block, MarkdownFence)
+            #         and block.source
+            #     ):
+            #         for numeral, name in enumerate(
+            #             get_special_name_from_code(block.source, block.lexer), 1
+            #         ):
+            #             menu_options.append(
+            #                 MenuItem(
+            #                     f"Explain '{name}'", f"explain('{name}')", f"{numeral}"
+            #                 )
+            #             )
 
             menu = Menu(block, menu_options)
         else:
-            self.notify("This block has no menu", title="Menu", severity="information")
-            self.app.bell()
-            return
+            # menu_options.extend(block.get_block_menu())
+            menu = Menu(block, menu_options)
+            # self.notify("This block has no menu", title="Menu", severity="information")
+            # self.app.bell()
+            # return
 
         menu.offset = Offset(1, block.region.offset.y)
         await self.mount(menu)
@@ -761,7 +1025,7 @@ class Conversation(containers.Vertical):
             return
         if text:
             self.app.copy_to_clipboard(text)
-            self.notify("Copied to clipboard")
+            self.flash("Copied to clipboard")
 
     def action_copy_to_prompt(self) -> None:
         block = self.get_cursor_block()
@@ -776,6 +1040,47 @@ class Conversation(containers.Vertical):
             self.prompt.append(text)
             self.focus_prompt()
 
+    def action_maximize_block(self) -> None:
+        if (block := self.get_cursor_block()) is not None:
+            self.screen.maximize(block, container=False)
+            block.focus()
+
+    def action_export_to_svg(self) -> None:
+        block = self.get_cursor_block()
+        if block is None:
+            return
+        import platformdirs
+        from textual._compositor import Compositor
+        from textual._files import generate_datetime_filename
+
+        width, height = block.outer_size
+        compositor = Compositor()
+        compositor.reflow(block, block.outer_size)
+        render = compositor.render_full_update()
+
+        from rich.console import Console
+        import io
+        import os.path
+
+        console = Console(
+            width=width,
+            height=height,
+            file=io.StringIO(),
+            force_terminal=True,
+            color_system="truecolor",
+            record=True,
+            legacy_windows=False,
+            safe_box=False,
+        )
+        console.print(render)
+        path = platformdirs.user_pictures_dir()
+        svg_filename = generate_datetime_filename("Toad", ".svg", None)
+        svg_path = os.path.expanduser(os.path.join(path, svg_filename))
+        console.save_svg(svg_path)
+        import webbrowser
+
+        webbrowser.open(f"file:///{svg_path}")
+
     def action_explain(self, topic: str | None = None) -> None:
         if (block := self.get_cursor_block(MarkdownBlock)) is not None and block.source:
             if topic:
@@ -784,17 +1089,13 @@ class Conversation(containers.Vertical):
                 PROMPT = f"Explain the following:\n{block.source}"
             self.screen.query_one(Explain).send_prompt(PROMPT)
 
-    def action_run(self) -> None:
-        if (block := self.get_cursor_block(MarkdownBlock)) is not None and block.source:
-            assert isinstance(block, MarkdownFence)
-            self.execute(block._content.plain, block.lexer)
-
     @work
     async def action_settings(self) -> None:
-        from toad.screens.settings import SettingsScreen
-
-        await self.app.push_screen_wait(SettingsScreen())
+        await self.app.push_screen_wait("settings")
         self.app.save_settings()
+
+    async def action_mode_switcher(self) -> None:
+        self.prompt.mode_switcher.focus()
 
     @work
     async def execute(self, code: str, language: str) -> None:
@@ -819,7 +1120,9 @@ class Conversation(containers.Vertical):
             self.window.focus()
             self.cursor.visible = True
             self.cursor.follow(cursor_block)
-            self.call_after_refresh(self.window.scroll_to_center, cursor_block)
+            self.call_after_refresh(
+                self.window.scroll_to_center, cursor_block, immediate=True
+            )
         else:
             self.cursor.visible = False
             self.window.anchor(False)
@@ -833,4 +1136,4 @@ class Conversation(containers.Vertical):
             from toad import about
             from toad.widgets.markdown_note import MarkdownNote
 
-            await self.post(MarkdownNote(about.render(), classes="about"))
+            await self.post(MarkdownNote(about.render(self.app), classes="about"))

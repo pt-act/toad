@@ -6,7 +6,7 @@ import rich.repr
 from typing import Generator, Iterable
 
 
-type ParseResult = Generator[StreamRead | Token, Token, None]
+type ParseResult[ParseType] = Generator[StreamRead | ParseType, Token, None]
 type PatternCheck = Generator[None, str, object | None]
 
 
@@ -140,20 +140,36 @@ class PatternToken(Token):
         yield None, self.value
 
 
-class StreamParser:
+class StreamParser[ParseType]:
+    """Parses a stream of text into tokens."""
+
     def __init__(self):
         self._gen = self.parse()
-        self._reading: StreamRead | str = next(self._gen)
+        self._reading: StreamRead | ParseType = next(self._gen)
 
     def read(self, count: int) -> Read:
+        """Read a specific number of bytes.
+
+        Args:
+            count: Number of bytes to read.
+        """
         return Read(count)
 
     def read_until(self, *characters: str) -> ReadUntil:
-        """Read until the given characters."""
+        """Read until the given characters.
+
+        Args:
+            characters: Set of characters to stop read.
+
+        """
         return ReadUntil(*characters)
 
     def read_regex(self, regex: str) -> ReadRegex:
-        """Search for the matching regex."""
+        """Search for the matching regex.
+
+        Args:
+            regex: Regular expression.
+        """
         return ReadRegex(regex)
 
     def read_patterns(self, start: str = "", **patterns) -> ReadPatterns:
@@ -162,12 +178,19 @@ class StreamParser:
         Args:
             start: Initial part of the string.
             **patterns: One or more patterns.
-
-
         """
         return ReadPatterns(start, **patterns)
 
-    def feed(self, text: str) -> Iterable[Token]:
+    def feed(self, text: str) -> Iterable[Token | ParseType]:
+        """Feed text in to parser.
+
+        Args:
+            text: Text from stream.
+
+        Returns:
+            A generator of tokens or the parse type.
+
+        """
         if not text or self._gen is None:
             yield EOFToken()
             return
@@ -244,7 +267,7 @@ class StreamParser:
                     else:
                         text = ""
 
-    def parse(self) -> Generator[StreamRead | str, Token | None, None]:
+    def parse(self) -> ParseResult[ParseType]:
         yield from ()
 
 

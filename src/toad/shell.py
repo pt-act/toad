@@ -11,6 +11,7 @@ import struct
 import termios
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from time import monotonic
 
 from textual.message import Message
 
@@ -32,21 +33,49 @@ def resize_pty(fd, cols, rows):
 
 @dataclass
 class CurrentWorkingDirectoryChanged(Message):
+    """Current working directory has changed in shell."""
+
     path: str
 
 
+@dataclass
+class ShellFinished(Message):
+    """The shell finished."""
+
+
 class Shell:
-    def __init__(self, conversation: Conversation) -> None:
+    def __init__(
+        self,
+        conversation: Conversation,
+        working_directory: str,
+        max_buffer_duration: float = 1 / 60,
+        shell="",
+        start="",
+    ) -> None:
         self.conversation = conversation
+        self.working_directory = working_directory
+        self.max_buffer_duration = max_buffer_duration
+
         self.ansi_log: ANSILog | None = None
         self.new_log: bool = False
-        self.shell = os.environ.get("SHELL", "sh")
+        self.shell = shell or os.environ.get("SHELL", "sh")
+        self.shell_start = start
         self.master = 0
         self._task: asyncio.Task | None = None
         self.width = 80
         self.height = 24
+        self._process: asyncio.subprocess.Process | None = None
+        self.writer: asyncio.WriteTransport | None = None
+
+        self._finished: bool = False
+        self._ready_event: asyncio.Event = asyncio.Event()
+
+    @property
+    def is_finished(self) -> bool:
+        return self._finished
 
     async def send(self, command: str, width: int, height: int) -> None:
+        await self._ready_event.wait()
         height = max(height, 1)
         self.width = width
         self.height = height
@@ -59,9 +88,17 @@ class Shell:
         self.ansi_log = None
 
     def start(self) -> None:
-        self._task = asyncio.create_task(self.run())
+        assert self._task is None
+        self._task = asyncio.create_task(self.run(), name=repr(self))
+
+    async def interrupt(self) -> None:
+        """Interrupt the running command."""
+        if self.writer is not None:
+            self.writer.write(b"\x03")
 
     async def run(self) -> None:
+        current_directory = self.working_directory
+
         master, slave = pty.openpty()
         self.master = master
 
@@ -73,6 +110,7 @@ class Shell:
 
         # Disable echo (ECHO flag)
         attrs[3] &= ~termios.ECHO
+        attrs[0] |= termios.ISIG
 
         # Apply the changes
         termios.tcsetattr(slave, termios.TCSANOW, attrs)
@@ -84,22 +122,26 @@ class Shell:
         env["COLORTERM"] = "truecolor"
         env["TOAD"] = "1"
         env["CLICOLOR"] = "1"
-        if IS_MACOS:
-            shell = f"{self.shell} +o interactive"
-        else:
-            shell = self.shell
 
-        process = await asyncio.create_subprocess_shell(
-            shell,
-            stdin=slave,
-            stdout=slave,
-            stderr=slave,
-            env=env,
-        )
+        shell = self.shell
+
+        try:
+            _process = await asyncio.create_subprocess_shell(
+                shell,
+                stdin=slave,
+                stdout=slave,
+                stderr=slave,
+                env=env,
+                cwd=current_directory,
+                start_new_session=True,  # Linux / macOS only
+            )
+        except Exception as error:
+            self.conversation.notify(f"Unable to start shell: {error}\n\nCheck your settings.", title="Shell", severity="error")
+            return
 
         os.close(slave)
-
-        reader = asyncio.StreamReader()
+        BUFFER_SIZE = 64 * 1024
+        reader = asyncio.StreamReader(BUFFER_SIZE)
         protocol = asyncio.StreamReaderProtocol(reader)
 
         loop = asyncio.get_event_loop()
@@ -114,23 +156,43 @@ class Shell:
             os.fdopen(os.dup(master), "wb", 0),
         )
         self.writer = write_transport
-        if not IS_MACOS:
-            self.writer.write(b'set +x\nPS1="";\n')
 
-        current_directory = ""
+        if shell_start := self.shell_start.strip():
+            shell_start = self.shell_start.strip()
+            if not shell_start.endswith("\n"):
+                shell_start += "\n"
+            self.writer.write(shell_start.encode("utf-8"))
+
         unicode_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-        await asyncio.sleep(1 / 60)
+
+        self._ready_event.set()
         try:
             while True:
-                data = await reader.read(1024 * 128)
+                data = await reader.read(BUFFER_SIZE)
+                if data:
+                    buffer_time = monotonic() + self.max_buffer_duration
+                    # Accumulate data for a short period of time, or until we have enough data
+                    # This can reduce the number of refreshes we need to do
+                    # Resulting in faster updates and less flicker.
+                    try:
+                        while (
+                            len(data) < BUFFER_SIZE
+                            and (time := monotonic()) < buffer_time
+                        ):
+                            async with asyncio.timeout(buffer_time - time):
+                                data += await reader.read(BUFFER_SIZE)
+                    except asyncio.TimeoutError:
+                        pass
+
                 if line := unicode_decoder.decode(data, final=not data):
-                    if self.ansi_log is None:
-                        self.ansi_log = await self.conversation.get_ansi_log(self.width)
-                        self.ansi_log.display = False
+                    if self.ansi_log is None or self.ansi_log.is_finalized:
+                        self.ansi_log = await self.conversation.new_ansi_log(
+                            self.width, display=False
+                        )
                     if self.ansi_log.write(line):
                         self.ansi_log.display = True
                     new_directory = self.ansi_log.current_directory
-                    if new_directory != current_directory:
+                    if new_directory and new_directory != current_directory:
                         current_directory = new_directory
                         self.conversation.post_message(
                             CurrentWorkingDirectoryChanged(current_directory)
@@ -140,5 +202,6 @@ class Shell:
 
         finally:
             transport.close()
-
-        await process.wait()
+        self.writer = None
+        self._finished = True
+        self.conversation.post_message(ShellFinished())

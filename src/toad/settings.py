@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import copy
 from functools import cached_property
 from json import dumps
 from dataclasses import dataclass
@@ -39,7 +40,7 @@ class SchemaDict(TypedDict, total=False):
 type SettingsType = dict[str, object]
 
 
-INPUT_TYPES = {"boolean", "integer", "string", "choices"}
+INPUT_TYPES = {"boolean", "integer", "number", "string", "choices", "text"}
 
 
 class SettingsError(Exception):
@@ -107,7 +108,29 @@ class Schema:
             if key not in settings:
                 settings = settings[key] = {}
 
-    @property
+    def get_default(self, key: str) -> object | None:
+        """Get a default for the given key.
+
+        Args:
+            key: Key in dotted notation
+
+        Returns:
+            Default, or `None`.
+        """
+        defaults = self.defaults
+
+        schema_object = defaults
+        for last, sub_key in loop_last(parse_key(key)):
+            if last:
+                return schema_object.get(sub_key, None)
+            else:
+                if isinstance(schema_object, dict):
+                    schema_object = schema_object.get(sub_key, {})
+                else:
+                    return None
+        return None
+
+    @cached_property
     def defaults(self) -> dict[str, object]:
         settings: dict[str, object] = {}
 
@@ -136,8 +159,10 @@ class Schema:
             "object": SchemaDict,
             "string": str,
             "integer": int,
+            "number": float,
             "boolean": bool,
             "choices": str,
+            "text": str,
         }
 
         def get_keys(setting: Setting) -> Iterable[tuple[str, type]]:
@@ -216,6 +241,10 @@ class Settings:
     def changed(self) -> bool:
         return self._changed
 
+    @property
+    def schema(self) -> Schema:
+        return self._schema
+
     def up_to_date(self) -> None:
         """Set settings as up to date (clears changed flag)."""
         self._changed = False
@@ -232,37 +261,74 @@ class Settings:
                 self._on_set_callback(key, self.get(key))
 
     def get[ExpectType](
-        self, key: str, expect_type: type[ExpectType] = object, expand: bool = True
+        self,
+        key: str,
+        expect_type: type[ExpectType] = object,
+        *,
+        expand: bool = True,
     ) -> ExpectType:
         from os.path import expandvars
 
         sub_settings = self._settings
+
         for last, sub_key in loop_last(parse_key(key)):
             if last:
                 if (value := sub_settings.get(sub_key)) is None:
-                    return expect_type()
+                    default = self._schema.get_default(key)
+                    if default is None:
+                        default = expect_type()
+                    if not isinstance(default, expect_type):
+                        default = expect_type(default)
+                    assert isinstance(default, expect_type)
+                    return default
+
                 if isinstance(value, str) and expand:
                     value = expandvars(value)
+                if not isinstance(value, expect_type):
+                    value = expect_type(value)
                 if not isinstance(value, expect_type):
                     raise InvalidValue(
                         f"key {sub_key!r} is not of expected type {expect_type.__name__}"
                     )
                 return value
-            if not isinstance(
-                (sub_settings := sub_settings.setdefault(sub_key, {})), dict
-            ):
-                return expect_type()
+            if not isinstance((sub_settings := sub_settings.get(sub_key, {})), dict):
+                default = self._schema.get_default(key)
+                if default is None:
+                    default = expect_type()
+                if not isinstance(default, expect_type):
+                    default = expect_type(default)
+                assert isinstance(default, expect_type)
+                return default
         assert False, "Can't get here"
 
     def set(self, key: str, value: object) -> None:
-        setting = self._settings
+        """Set a setting value.
+
+        Args:
+            key: Key in dot notation.
+            value: New value.
+        """
+        current_value = self.get(key, expand=False)
+
+        updated_settings = copy.deepcopy(self._settings)
+
+        setting = updated_settings
         for last, sub_key in loop_last(parse_key(key)):
             if last:
-                if setting.get(sub_key) != value:
-                    setting[sub_key] = value
+                if current_value != value:
                     self._changed = True
+                    self._settings = updated_settings
+                assert isinstance(setting, dict)
+                setting[sub_key] = value
             else:
-                setting = setting.setdefault(sub_key, {})
+                setting_node = setting.setdefault(sub_key, {})
+                if isinstance(setting_node, dict):
+                    setting = setting_node
+                else:
+                    assert isinstance(setting, dict)
+                    setting[sub_key] = {}
+                    setting = setting[sub_key]
+
         if self._on_set_callback is not None:
             self._on_set_callback(key, value)
 

@@ -4,13 +4,15 @@ from typing import TYPE_CHECKING
 
 from textual import on
 from textual.app import ComposeResult
+from textual import lazy
 from textual import containers
-from textual.screen import ModalScreen
-from textual.widgets import Input, Select, Checkbox, Footer, Static
+from textual.content import Content
+from textual.screen import ModalScreen, ScreenResultType
+from textual.widgets import Input, Select, Checkbox, Footer, Static, TextArea
 from textual.compose import compose
 from textual.validation import Validator, Number
 from textual import getters
-from textual import lazy
+
 
 from toad.settings import Setting
 
@@ -27,10 +29,12 @@ class SettingsScreen(ModalScreen):
         ("escape", "dismiss", "Dismiss settings"),
         ("ctrl+s", "screen.focus('#search')", "Focus search"),
     ]
+    CSS_PATH = "settings.tcss"
 
     app: ToadApp
 
     search_input = getters.query_one("Input#search", Input)
+
     AUTO_FOCUS = "Input#search"
 
     def compose(self) -> ComposeResult:
@@ -60,15 +64,34 @@ class SettingsScreen(ModalScreen):
                         classes="setting",
                         name=f"{group_title.lower()} {setting.title.lower()}",
                     ):
-                        value = settings.get(setting.key, expand=False)
+                        value = settings.get(setting.key, object, expand=False)
+                        default = settings.schema.get_default(setting.key)
+
+                        if setting.type == "text" or default is None:
+                            help = Content.from_markup(setting.help)
+                        else:
+                            if setting.help:
+                                help = Content.assemble(
+                                    Content.from_markup(setting.help),
+                                    (f"\ndefault: {default!r}", "$text-secondary"),
+                                )
+                            else:
+                                help = Content.styled(
+                                    f"default: {default!r}", "$text-secondary"
+                                )
+
                         yield Static(setting.title, classes="title")
-                        if setting.help:
-                            yield Static(setting.help, classes="help")
+                        yield Static(help, classes="help")
                         if setting.type == "string":
                             with self.prevent(Input.Changed):
                                 yield Input(
                                     str(value), classes="input", name=setting.key
                                 )
+                        if setting.type == "text":
+                            # with self.prevent(TextArea.Changed):
+                            yield TextArea(
+                                str(value), classes="input", name=setting.key
+                            )
                         elif setting.type == "boolean":
                             with self.prevent(Checkbox.Changed):
                                 yield Checkbox(
@@ -95,6 +118,27 @@ class SettingsScreen(ModalScreen):
                                     name=setting.key,
                                     validators=validators,
                                 )
+                        elif setting.type == "number":
+                            try:
+                                integer_value = float(value)
+                            except (ValueError, TypeError):
+                                integer_value = setting.default
+                            setting_validate = setting.validate or []
+                            validators: list[Validator] = []
+                            for validate in setting_validate:
+                                validate_type = validate["type"]
+                                if validate_type == "minimum":
+                                    validators.append(Number(minimum=validate["value"]))
+                                elif validate_type == "maximum":
+                                    validators.append(Number(maximum=validate["value"]))
+                            with self.prevent(Input.Changed):
+                                yield Input(
+                                    str(integer_value),
+                                    type="number",
+                                    classes="input",
+                                    name=setting.key,
+                                    validators=validators,
+                                )
                         elif setting.type == "choices":
                             select_value = str(value)
                             choices = setting.choices or []
@@ -113,15 +157,13 @@ class SettingsScreen(ModalScreen):
         with containers.Vertical(id="contents"):
             with containers.VerticalGroup(classes="search-container"):
                 yield Input(id="search", placeholder="Search settings")
-            with containers.VerticalScroll(can_focus=False):
+            with lazy.Reveal(containers.VerticalScroll(can_focus=False)):
                 yield from compose(self, schema_to_widget("", schema.settings_map))
 
         yield Footer()
 
-    def on_mount(self) -> None:
-        self.query_one("#search").focus(scroll_visible=False)
-
     @on(Input.Blurred, "Input")
+    @on(Input.Submitted, "Input")
     def on_input_blurred(self, event: Input.Blurred) -> None:
         if event.validation_result and not event.validation_result.is_valid:
             self.notify(
@@ -136,8 +178,15 @@ class SettingsScreen(ModalScreen):
         if event.input.name is not None:
             if event.input.type == "integer":
                 self.app.settings.set(event.input.name, int(event.value or "0"))
+            elif event.input.type == "number":
+                self.app.settings.set(event.input.name, float(event.value or "0"))
             else:
                 self.app.settings.set(event.input.name, event.value)
+
+    @on(TextArea.Changed)
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        if event.text_area.name is not None:
+            self.app.settings.set(event.text_area.name, event.text_area.text)
 
     @on(Checkbox.Changed)
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
@@ -170,6 +219,10 @@ class SettingsScreen(ModalScreen):
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "focus":
             if not self.is_mounted:
-                return False
-            return False if self.search_input.has_focus else True
+                return None
+            return None if self.search_input.has_focus else True
         return True
+
+    async def action_dismiss(self, result: ScreenResultType | None = None) -> None:
+        self.query("#search").focus()
+        self.call_after_refresh(self.dismiss, result)

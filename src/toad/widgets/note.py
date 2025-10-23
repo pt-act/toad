@@ -5,6 +5,8 @@ from toad.menus import MenuItem
 
 
 class Note(Static):
+    DEFAULT_CLASSES = "block"
+
     def get_block_menu(self) -> Iterable[MenuItem]:
         return
         yield

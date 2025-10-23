@@ -41,6 +41,8 @@ def condense_path(path: str, width: int, *, prefix: str = "") -> str:
         A condensed string.
     """
     # TODO: handle OS separators and path issues
+    if cell_len(path) < width:
+        return path
     components = path.split("/")
     condensed = components
     for left, right in radiate_range(len(components)):
@@ -53,17 +55,21 @@ def condense_path(path: str, width: int, *, prefix: str = "") -> str:
 
 
 class CondensedPath(Static):
-    path = reactive(os.path.curdir)
+    path = reactive("")
 
     def on_resize(self) -> None:
         self.watch_path(self.path)
 
     def watch_path(self, path: str) -> None:
+        if not path or not self.size:
+            return
         path = os.path.abspath(path)
-        user_root = os.path.expanduser("~/")
+        self.tooltip = str(path)
+        user_root = os.path.abspath(os.path.expanduser("~/"))
+        if not user_root.endswith("/"):
+            user_root += "/"
         if path.startswith(user_root):
             path = "~/" + path[len(user_root) :]
-        self.tooltip = path
         if self.is_mounted:
             condensed_path = Content(condense_path(path, self.size.width))
             self.update(condensed_path)

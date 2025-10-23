@@ -17,6 +17,7 @@ from pygments.token import Token
 
 
 RE_MATCH_FILE_PROMPT = re.compile(r"(@\S+)|@\"(.*)\"")
+RE_SLASH_COMMAND = re.compile(r"(\/\S*)(\W.*)?$")
 
 
 class TextualHighlightTheme(HighlightTheme):
@@ -106,10 +107,23 @@ class HighlightedTextArea(TextArea):
     @property
     def highlight_lines(self) -> Sequence[Content]:
         if self._highlight_lines is None:
+            text = self.text
+            if (
+                text.startswith("/")
+                and "\n" not in text
+                and (match := RE_SLASH_COMMAND.match(self.text)) is not None
+            ):
+                command, _operand = match.groups()
+                content = Content(text)
+                content = content.stylize("$text-success", 0, len(command))
+                content = content.stylize("dim", len(command) + 1)
+                self._highlight_lines = [content]
+                return self._highlight_lines
+
             language = self.highlight_language
             if language == "markdown":
                 content = highlight(
-                    self.text + "\n```",
+                    text + "\n```",
                     language="markdown",
                     theme=TextualHighlightTheme,
                 )
@@ -119,7 +133,7 @@ class HighlightedTextArea(TextArea):
                 content_lines = content.split("\n", allow_blank=True)[:-1]
                 self._highlight_lines = content_lines
             elif language == "shell":
-                content = highlight(self.text, language="sh")
+                content = highlight(text, language="sh")
                 content_lines = content.split("\n", allow_blank=True)
                 self._highlight_lines = content_lines
             else:

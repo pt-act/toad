@@ -1,3 +1,7 @@
+import os
+import sys
+
+
 def mandelbrot(c: complex, max_iter: int) -> int:
     """Determine the number of iterations for a point in the Mandelbrot set.
 
@@ -40,26 +44,43 @@ def draw_mandelbrot(width: int, height: int, max_iter: int) -> None:
         height (int): Height of the output in terminal rows.
         max_iter (int): Maximum number of iterations for Mandelbrot calculation.
     """
+    # Clear screen and hide cursor
+    print("\033[2J\033[H\033[?25l", end="")
+    
     for y in range(height):
+        # Move cursor to start of line
+        print(f"\033[{y+1};1H", end="")
+        
         for x in range(width):
             # Map the (x, y) pixel to a point in the complex plane
             real = (x / width) * 3.5 - 2.5
             imag = (y / height) * 2.0 - 1.0
             c = complex(real, imag)
-            
+
             # Calculate the number of iterations
             iter_count = mandelbrot(c, max_iter)
-            
+
             # Get the color for this point and print a space (box)
             color = colorize(iter_count, max_iter)
             print(f"{color}  ", end="")
 
-        # Reset color and move to the next line
-        print("\033[0m")
+        # Reset color at end of line
+        print("\033[0m", end="")
+    
+    # Show cursor again and ensure we're at the bottom
+    print("\033[?25h", end="")
+    sys.stdout.flush()
 
-# Configuration for drawing
-width = 80    # Number of characters wide
-height = 40   # Number of character rows
+# Get terminal dimensions
+try:
+    terminal_size = os.get_terminal_size()
+    width = terminal_size.columns // 2  # Divide by 2 since we print 2 spaces per pixel
+    height = terminal_size.lines - 1  # Leave one line for prompt
+except OSError:
+    # Fallback if terminal size cannot be determined
+    width = 80
+    height = 40
+
 max_iter = 100  # Maximum iterations for Mandelbrot calculation
 
 # Draw the Mandelbrot set
