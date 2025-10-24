@@ -281,15 +281,17 @@ class Conversation(containers.Vertical):
 
         return True
 
-    def action_expand_block(self) -> None:
+    async def action_expand_block(self) -> None:
         if (cursor_block := self.cursor_block) is not None:
             if isinstance(cursor_block, ExpandProtocol):
                 cursor_block.expand_block()
+                self.call_after_refresh(self.cursor.follow, cursor_block)
 
-    def action_collapse_block(self) -> None:
+    async def action_collapse_block(self) -> None:
         if (cursor_block := self.cursor_block) is not None:
             if isinstance(cursor_block, ExpandProtocol):
                 cursor_block.collapse_block()
+                self.call_after_refresh(self.cursor.follow, cursor_block)
 
     async def post_agent_response(self, fragment: str = "") -> AgentResponse:
         """Get or create an agent response widget."""
@@ -441,6 +443,8 @@ class Conversation(containers.Vertical):
         event.menu.display = False
         if event.action is not None:
             await self.run_action(event.action, {"block": event.owner})
+        if (cursor_block := self.get_cursor_block()) is not None:
+            self.call_after_refresh(self.cursor.follow, cursor_block)
         self.call_after_refresh(event.menu.remove)
 
     @on(Menu.Dismissed)
