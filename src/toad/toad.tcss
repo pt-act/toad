@@ -212,7 +212,8 @@ Conversation {
         layout: vertical;
 
         ToolCallHeader {
-            width: auto;            
+            width: auto;
+            max-width: 1fr;            
         }
     }
 
@@ -335,6 +336,9 @@ Prompt {
 
     Question {
         display: none;
+        #prompt {
+            width: 1fr;            
+        }
     }
     &.-mode-ask {
         Question {

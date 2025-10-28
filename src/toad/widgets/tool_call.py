@@ -48,7 +48,8 @@ class ToolCallHeader(Static):
     ALLOW_SELECT = False
     DEFAULT_CSS = """
     ToolCallHeader {
-        width: auto;        
+        width: auto;
+        max-width: 1fr;        
         &:hover {
             background: $panel;
         }
@@ -60,9 +61,7 @@ class ToolCall(containers.VerticalGroup):
     DEFAULT_CLASSES = "block"
     DEFAULT_CSS = """
     ToolCall {
-        padding: 0 1;
-        # background: $foreground 5%;
-        # border-top: panel black 10%;
+        padding: 0 1;        
         width: 1fr;
         layout: stream;
         height: auto;
@@ -72,10 +71,7 @@ class ToolCall(containers.VerticalGroup):
             margin-right: 1;
         }
         #tool-content {
-            margin-top: 1;
-            # &:empty {
-            #     display: none;
-            # }
+            margin-top: 1;            
             display: none;
         }
         &.-expanded {
@@ -155,7 +151,7 @@ class ToolCall(containers.VerticalGroup):
         title = tool_call.get("title", "title")
         status = tool_call.get("status", "pending")
 
-        expand_icon: Content = Content.styled("▶ ", "$text 40%")
+        expand_icon: Content = Content()
         if self.has_content:
             if self.expanded:
                 expand_icon = Content("▼ ")

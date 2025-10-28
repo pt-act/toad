@@ -92,7 +92,6 @@ class Option(containers.HorizontalGroup):
     def compose(self) -> ComposeResult:
         key = self.key
         yield NonSelectableLabel("❯", id="caret")
-        # yield NonSelectableLabel(Content.styled(f"▌{key}▐", "r b dim"), id="index")
         if key:
             yield NonSelectableLabel(Content.styled(f"{key}", "b"), id="index")
         else:
