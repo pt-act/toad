@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import os
-from typing import Iterable, NamedTuple, Sequence
+from typing import Callable, Final, Iterable, NamedTuple, Sequence
 
 
 from textual.geometry import Size, Region
@@ -14,12 +14,14 @@ from textual.strip import Strip
 from textual.selection import Selection
 from textual.filter import LineFilter
 
+from toad._loop import loop_first
 from toad.ansi import (
     ANSIStream,
     ANSICursor,
     ANSIClear,
     ANSICommand,
     ANSIWorkingDirectory,
+    ClearType,
 )
 from toad.menus import MenuItem
 
@@ -54,6 +56,13 @@ class ANSILog(ScrollView, can_focus=False):
     }
     """
 
+    CLEAR_MAP: Final[dict[ClearType, Callable[[ANSILog], None]]] = {
+        "cursor_to_end": lambda log: log._clear_cursor_to_end(),
+        "cursor_to_beginning": lambda log: log._clear_cursor_to_end(),
+        "screen": lambda log: log._clear_screen(),
+        "scrollback": lambda log: log._clear_scrollback(),
+    }
+
     def __init__(
         self,
         name: str | None = None,
@@ -66,9 +75,9 @@ class ANSILog(ScrollView, can_focus=False):
         self.minimum_terminal_width = minimum_terminal_width
 
         self.cursor_line = 0
-        """folded line index."""
+        """Folded line index of cursor."""
         self.cursor_offset = 0
-        """folded line offset"""
+        """Cursor offset within the folded line."""
 
         # Sequence of lines
         self._lines: list[LineRecord] = []
@@ -147,6 +156,10 @@ class ANSILog(ScrollView, can_focus=False):
             position += len(folded_line.content)
         return position
 
+    @property
+    def height(self) -> int:
+        return self.size.height
+
     def get_block_menu(self) -> Iterable[MenuItem]:
         return
         yield
@@ -208,6 +221,7 @@ class ANSILog(ScrollView, can_focus=False):
     def _handle_ansi_command(self, ansi_command: ANSICommand) -> bool:
         added_content = False
         folded_lines = self._folded_lines
+        # print(ansi_command)
         match ansi_command:
             case ANSICursor(
                 delta_x,
@@ -270,8 +284,64 @@ class ANSILog(ScrollView, can_focus=False):
             case ANSIWorkingDirectory(path):
                 self.current_directory = path
                 self.finalize()
+            case ANSIClear(clear):
+                self.CLEAR_MAP[clear](self)
+
+            case _:
+                print("Unhandled ANSI COMMAND", ansi_command)
 
         return added_content
+
+    def _clear_cursor_to_end(self) -> None:
+        cursor_line = self.cursor_line
+        folded_line = self._folded_lines[self.cursor_line]
+        line = self._lines[folded_line.line_no].content
+        updated_line = line[self.cursor_line_offset :]
+        self.update_line(folded_line.line_no, updated_line)
+
+        del self._folded_lines[cursor_line + 1 :]
+        del self._lines[folded_line.line_no + 1 :]
+
+    def _clear_cursor_to_beginning(self) -> None:
+        pass
+
+    def _clear_range(self, start: tuple[int, int], end: tuple[int, int]) -> None:
+        start_line, start_offset = start
+        end_line, end_offset = end
+
+        self._line_to_fold[start_line]
+
+    def _clear_screen(self) -> None:
+        # WIP
+        clear_folded_lines = self._folded_lines[-self.height :]
+        if not clear_folded_lines:
+            return
+        cursor_offset = self.cursor_offset
+        print(cursor_offset)
+        last_folded_line = self._folded_lines[-1]
+
+        first_folded_line = clear_folded_lines[0]
+        line = self._lines[first_folded_line.line_no]
+        self.update_line(
+            first_folded_line.line_no,
+            line.content[: first_folded_line.line_offset],
+        )
+
+        del self._line_to_fold[first_folded_line.line_no + 1 :]
+        del self._lines[first_folded_line.line_no + 1 :]
+        del self._folded_lines[-self.height :]
+
+        for n in range(self.height - 2):
+            self.add_line(Content())
+        last_line = Content.assemble(" " * cursor_offset)
+        print(repr(last_line.plain))
+        self.add_line(last_line)
+        self.cursor_offset = cursor_offset
+        self.refresh()
+        self._clear_caches()
+
+    def _clear_scrollback(self) -> None:
+        pass
 
     def write(self, text: str) -> bool:
         """Write to the log.
@@ -458,8 +528,9 @@ if __name__ == "__main__":
 
             process = await asyncio.create_subprocess_shell(
                 # "python -m rich.palette;python -m rich.palette;",
-                "python ansi_mandel.py",
+                # "python ansi_mandel.py",
                 # "python simple_test.py",
+                "python sandbox/clear_screen.py",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env=env,

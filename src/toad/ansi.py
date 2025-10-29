@@ -535,6 +535,9 @@ class ANSICursor(NamedTuple):
 class ANSIClear(NamedTuple):
     clear: ClearType
 
+    def __rich_repr__(self) -> rich.repr.Result:
+        yield self.clear
+
 
 # Not technically part of the terminal protocol
 @rich.repr.auto
