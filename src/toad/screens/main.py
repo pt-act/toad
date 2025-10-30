@@ -15,7 +15,6 @@ from textual import containers
 
 from toad.widgets.throbber import Throbber
 from toad.widgets.conversation import Conversation
-from toad.widgets.version import Version
 from toad.widgets.side_bar import SideBar
 
 
@@ -59,8 +58,8 @@ class MainScreen(Screen, can_focus=False):
 
     COMMANDS = {ModeProvider}
     BINDINGS = [
-        Binding("f3", "show_files", "Files"),
-        Binding("f3", "hide_files", "Hide files"),
+        Binding("f3", "show_sidebar", "Sidebar"),
+        Binding("f3", "hide_sidebar", "Hide sidebar"),
     ]
 
     BINDING_GROUP_TITLE = "Screen"
@@ -73,7 +72,6 @@ class MainScreen(Screen, can_focus=False):
     column = reactive(False)
     column_width = reactive(100)
     scrollbar = reactive("")
-    show_tree = reactive(False, toggle_class="-show-tree", bindings=True)
     project_path: var[Path] = var(Path("./").expanduser().absolute())
 
     def __init__(self, project_path: Path) -> None:
@@ -111,18 +109,19 @@ class MainScreen(Screen, can_focus=False):
             self.conversation.prompt.suggest(event.option.id)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        if action == "show_files" and self.show_tree:
+        if action == "show_sidebar" and self.side_bar.has_focus_within:
             return False
-        if action == "hide_files" and not self.show_tree:
+        if action == "hide_sidebar" and not self.side_bar.has_focus_within:
             return False
+        # if action == "hide_sidebar" and not self.show_sidebar:
+        #     return False
         return True
 
-    def action_show_files(self) -> None:
-        self.show_tree = True
+    def action_show_sidebar(self) -> None:
+        self.side_bar.query_one("Collapsible CollapsibleTitle").focus()
 
-    def action_hide_files(self) -> None:
-        self.show_tree = False
-        self.conversation.prompt.focus()
+    def action_hide_sidebar(self) -> None:
+        self.conversation.focus_prompt()
 
     def action_focus_prompt(self) -> None:
         self.conversation.focus_prompt()

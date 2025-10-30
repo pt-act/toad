@@ -497,18 +497,19 @@ MainScreen {
     SideBar {
         border-right: tall black 50%;
         background: transparent;
-        &:focus-within {
-        
-            # border: none;
-        }
-        # border: tall black 50%;
+              
         dock: left;
         padding: 0 0;
         margin: 0;
         width: auto;
         max-width: 45%;
         min-width: 40;
-        
+        # display: none;
+
+        &:focus-within {            
+            display: block;
+        }
+
         DirectoryTree {
             background: transparent;
             &:focus {

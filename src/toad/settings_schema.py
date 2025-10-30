@@ -29,6 +29,26 @@ SCHEMA: list[SchemaDict] = [
         "type": "object",
         "fields": [
             {
+                "key": "theme",
+                "title": "Theme",
+                "help": "One of the builtin Textual themes.",
+                "type": "choices",
+                "default": "dracula",
+                "choices": [
+                    "catppuccin-latte",
+                    "catppuccin-mocha",
+                    "dracula",
+                    "flexoki",
+                    "gruvbox",
+                    "monokai",
+                    "nord",
+                    "solarized-light",
+                    "textual-dark",
+                    "textual-light",
+                    "tokyo-night",
+                ],
+            },
+            {
                 "key": "footer",
                 "title": "Enabled footer?",
                 "help": "Disable the footer if you want additional room.",
@@ -58,26 +78,6 @@ SCHEMA: list[SchemaDict] = [
                 "choices": ["normal", "thin", "hidden"],
             },
             {
-                "key": "theme",
-                "title": "Theme",
-                "help": "One of the builtin Textual themes.",
-                "type": "choices",
-                "default": "dracula",
-                "choices": [
-                    "catppuccin-latte",
-                    "catppuccin-mocha",
-                    "dracula",
-                    "flexoki",
-                    "gruvbox",
-                    "monokai",
-                    "nord",
-                    "solarized-light",
-                    "textual-dark",
-                    "textual-light",
-                    "tokyo-night",
-                ],
-            },
-            {
                 "key": "throbber",
                 "title": "Thinking animation",
                 "help": "Animation to show while the agent is busy",
@@ -96,6 +96,20 @@ SCHEMA: list[SchemaDict] = [
                 "default": 3.0,
                 "validate": [{"type": "minimum", "value": 0.5}],
             },
+        ],
+    },
+    {
+        "key": "sidebar",
+        "title": "Sidebar settings",
+        "help": "Customize how the sidebar is displayed.",
+        "type": "object",
+        "fields": [
+            {
+                "key": "hide",
+                "title": "Hide the sidebar when not in use?",
+                "type": "boolean",
+                "default": False,
+            }
         ],
     },
     {
