@@ -1,3 +1,5 @@
+# Schema defined in agent_schema.py
+# https://github.com/google-gemini/gemini-cli
 identity = "geminicli.com"
 name = "Gemini CLI"
 short_name = "gemini"

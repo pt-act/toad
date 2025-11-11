@@ -25,7 +25,7 @@ class Agent(TypedDict):
     """Describes an agent which Toad can connect to. Currently only Agent Client Protocol is supported."""
 
     identity: str
-    """A unique identifier for this agent useable as a filename. Should be a domain the agent developer owns,
+    """A unique identifier for this agent. Should be a domain the agent developer owns,
     although it doesn't have to resolve to anything.     
     For example: 'claude.anthropic.ai'"""
     name: str
@@ -37,7 +37,7 @@ class Agent(TypedDict):
     protocol: AgentProtocol
     """The protocol used by the agent. Currently only 'acp' is supported."""
     type: "AgentType"
-    """The type of the agent."""
+    """The type of the agent. Typically "coding" for agentic coding."""
     author_name: str
     """The author of the agent. For example 'Anthropic'."""
     author_url: str
@@ -49,7 +49,7 @@ class Agent(TypedDict):
     description: str
     """A description of the agent. A few sentences max."""
     tags: list[Tag]
-    """Tags which identifies the type of agent. Must not be empty. For agents it will typically be `['coding']`."""
+    """Tags which identify the agent. Should be empty for now."""
 
     help: str
     """A Markdown document with additional details regarding the agent."""
@@ -59,13 +59,3 @@ class Agent(TypedDict):
 
     actions: dict[OS, dict[Action, Command]]
     """Scripts to perform actions, typically at least to install the agent."""
-
-
-class InstalledAgent(TypedDict):
-    identity: str
-    """Identity of installed agent (matches Agent['identity'])"""
-    name: str
-    """Long form name of agent."""
-    short_name: str
-    """Short name of agent (used when launching from the command line)."""
-    run_command: dict[OS, str]
