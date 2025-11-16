@@ -355,7 +355,6 @@ class StoreScreen(Screen):
         LAUNCHER_KEYS = "123456789abcdef"
         if event.character in LAUNCHER_KEYS:
             launch_item_offset = LAUNCHER_KEYS.find(event.character)
-            self.launcher.focus()
             try:
                 self.launcher.grid_select.children[launch_item_offset]
             except IndexError:
@@ -366,6 +365,7 @@ class StoreScreen(Screen):
                 )
                 self.app.bell()
                 return
+            self.launcher.focus()
             self.launcher.highlighted = launch_item_offset
 
     def action_quick_launch(self) -> None:
