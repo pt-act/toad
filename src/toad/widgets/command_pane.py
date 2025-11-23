@@ -9,6 +9,7 @@ import struct
 import termios
 
 
+from textual import events
 from textual.message import Message
 
 from toad.shell_read import shell_read
@@ -22,6 +23,14 @@ class CommandError(Exception):
 
 
 class CommandPane(Terminal):
+    DEFAULT_CSS = """
+    CommandPane {
+        scrollbar-size: 0 0;
+
+    }
+
+    """
+
     def __init__(
         self,
         name: str | None = None,
@@ -30,6 +39,7 @@ class CommandPane(Terminal):
     ):
         self._execute_task: asyncio.Task | None = None
         self._return_code: int | None = None
+        self._master: int | None = None
         super().__init__(name=name, id=id, classes=classes)
 
     @property
@@ -41,12 +51,30 @@ class CommandPane(Terminal):
         return_code: int
 
     def execute(self, command: str) -> None:
-        self._execute_task = asyncio.create_task(self._execute(command))
+        def start_execute_task() -> None:
+            self._execute_task = asyncio.create_task(self._execute(command))
+
+        self.call_after_refresh(start_execute_task)
+
+    def on_resize(self, event: events.Resize):
+        event.prevent_default()
+        if self._master is None:
+            return
+        self._size_changed()
+
+    def _size_changed(self):
+        if self._master is None:
+            return
+        width, height = self.scrollable_content_region.size
+        self.update_size(width, height)
+        size = struct.pack("HHHH", height, width, 0, 0)
+        fcntl.ioctl(self._master, termios.TIOCSWINSZ, size)
 
     async def _execute(self, command: str) -> None:
-        width, height = self.scrollable_content_region.size
+        # width, height = self.scrollable_content_region.size
 
         master, slave = pty.openpty()
+        self._master = master
 
         flags = fcntl.fcntl(master, fcntl.F_GETFL)
         fcntl.fcntl(master, fcntl.F_SETFL, flags | os.O_NONBLOCK)
@@ -83,8 +111,9 @@ class CommandPane(Terminal):
 
         os.close(slave)
 
-        size = struct.pack("HHHH", height, width, 0, 0)
-        fcntl.ioctl(master, termios.TIOCSWINSZ, size)
+        # size = struct.pack("HHHH", height, width, 0, 0)
+        # fcntl.ioctl(master, termios.TIOCSWINSZ, size)
+        self._size_changed()
 
         BUFFER_SIZE = 64 * 1024
         reader = asyncio.StreamReader(BUFFER_SIZE)

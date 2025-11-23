@@ -72,11 +72,13 @@ class Terminal(ScrollView, can_focus=True):
         return selection.extract(text), "\n"
 
     def _on_resize(self, event: events.Resize) -> None:
-        self._terminal_render_cache.grow(event.size.height * 2)
-        self._update_width()
+        width, height = self.scrollable_content_region.size
+        self.update_size(width, height)
 
-    def _update_width(self) -> None:
-        window_width = self.scrollable_content_region.width or 80
+    def update_size(self, width: int, height: int) -> None:
+        self.state.update_size(width, height)
+        self._terminal_render_cache.grow(height * 2)
+        window_width = width or 80
         # if window_width == self._width:
         #     return
         # self._width = window_width
@@ -88,14 +90,19 @@ class Terminal(ScrollView, can_focus=True):
             max(min(self.max_line_width, self.max_window_width), window_width),
         )
         self._width = width
-        self.state.update_size(width=self._width)
+
         self._terminal_render_cache.clear()
-        self.refresh()
+        # self.refresh()
 
     def on_mount(self) -> None:
         self.auto_links = False
         self.anchor()
-        self.call_after_refresh(self._update_width)
+
+        def set_initial_size():
+            width, height = self.scrollable_content_region.size
+            self.update_size(width, height)
+
+        self.call_after_refresh(set_initial_size)
 
     def write(self, text: str) -> None:
         self.state.write(text)
@@ -108,11 +115,6 @@ class Terminal(ScrollView, can_focus=True):
         if self._anchored and not self._anchor_released:
             self.scroll_y = self.max_scroll_y
         self.refresh()
-        # print(
-        #     "CACHE",
-        #     self._terminal_render_cache.hits,
-        #     self._terminal_render_cache.misses,
-        # )
 
     def render_line(self, y: int) -> Strip:
         scroll_x, scroll_y = self.scroll_offset

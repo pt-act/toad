@@ -234,8 +234,9 @@ class ANSICursor(NamedTuple):
             return (replace_start, replace_end)
 
 
+@rich.repr.auto
 class ANSINewLine:
-    pass
+    """New line (diffrent in alternate buffer)"""
 
 
 @rich.repr.auto
@@ -1027,44 +1028,43 @@ class TerminalState:
             direction: +1 for down, -1 for up.
             lines: Number of lines.
         """
-        # from textual import log
-
+        print("SCROLL", direction, lines)
         buffer = self.buffer
         margin_top, margin_bottom = buffer.scroll_margin.get_line_range(self.height)
-        line_start = margin_top
-        line_end = margin_bottom + 1
 
+        copy_content = EMPTY_LINE
+        copy_style = NULL_STYLE
         if direction == -1:
             # up (first in test)
-            for line_no in range(line_start, line_end):
+            for line_no in range(margin_top, margin_bottom + 1):
                 copy_line_no = line_no + lines
-                if copy_line_no > margin_bottom:
-                    copy_line = EMPTY_LINE
-                else:
+                if copy_line_no <= margin_bottom:
                     try:
-                        copy_line = buffer.lines[copy_line_no].content
+                        copy_line = buffer.lines[copy_line_no]
+                        copy_content = copy_line.content
+                        copy_style = copy_line.style
                     except IndexError:
                         copy_line = EMPTY_LINE
-                self.update_line(buffer, line_no, copy_line)
-
+                self.update_line(buffer, line_no, copy_content, copy_style)
         else:
             # down
-            for line_no in reversed(range(line_start, line_end)):
+            for line_no in reversed(range(margin_top, margin_bottom + 1)):
                 copy_line_no = line_no - lines
-                if copy_line_no < margin_top:
-                    copy_line = EMPTY_LINE
-                else:
+                if copy_line_no >= margin_top:
                     try:
-                        copy_line = buffer.lines[copy_line_no].content
+                        copy_line = buffer.lines[copy_line_no]
+                        copy_content = copy_line.content
+                        copy_style = copy_line.style
                     except IndexError:
                         copy_line = EMPTY_LINE
-                self.update_line(buffer, line_no, copy_line)
+                self.update_line(buffer, line_no, copy_content, copy_style)
 
     def _handle_ansi_command(self, ansi_command: ANSICommand) -> None:
+        # print(ansi_command)
         if isinstance(ansi_command, ANSINewLine):
             if self.alternate_screen:
                 # New line behaves differently in alternate screen
-                ansi_command = ANSICursor(delta_y=+1)
+                ansi_command = ANSICursor(delta_y=+1, auto_scroll=True)
             else:
                 ansi_command = ANSICursor(delta_y=+1, absolute_x=0)
 
@@ -1092,11 +1092,15 @@ class TerminalState:
                     margin_top, margin_bottom = buffer.scroll_margin.get_line_range(
                         self.height
                     )
+                    print("auto scroll", margin_top, margin_bottom)
+                    print("cursor", buffer.cursor_line)
                     if (
                         buffer.cursor_line >= margin_top
                         and buffer.cursor_line <= margin_bottom
                     ):
                         start_line_no = self.screen_start_line_no
+                        start_line_no = 0
+                        print("start line", start_line_no)
                         scroll_cursor = buffer.cursor_line + delta_y
                         if delta_y == +1 and (
                             scroll_cursor >= (start_line_no + margin_bottom)
@@ -1157,7 +1161,9 @@ class TerminalState:
                                     strip_control_codes=False,
                                 )
 
-                    self.update_line(buffer, folded_line.line_no, updated_line)
+                    self.update_line(
+                        buffer, folded_line.line_no, updated_line, line.style
+                    )
                     if not previous_content.is_same(folded_line.content):
                         buffer.updates = self.advance_updates()
 
@@ -1208,6 +1214,8 @@ class TerminalState:
                 self._line_updated(buffer, buffer.cursor_line)
 
             case ANSIScroll(direction, lines):
+                print(ansi_command)
+                print(self.buffer.scroll_margin)
                 self.scroll_buffer(direction, lines)
 
             case ANSICharacterSet(dec, dec_invoke):
@@ -1287,7 +1295,9 @@ class TerminalState:
 
         buffer.updates = updates
 
-    def update_line(self, buffer: Buffer, line_index: int, line: Content) -> None:
+    def update_line(
+        self, buffer: Buffer, line_index: int, line: Content, style: Style
+    ) -> None:
         while line_index >= len(buffer.lines):
             self.add_line(buffer, EMPTY_LINE)
 
@@ -1297,6 +1307,7 @@ class TerminalState:
         )
         line_record = buffer.lines[line_index]
         line_record.content = line
+        line_record.style = style
         line_record.folds[:] = self._fold_line(
             line_index, line_expanded_tabs, self.width
         )
