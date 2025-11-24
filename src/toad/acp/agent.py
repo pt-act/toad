@@ -399,11 +399,16 @@ class Agent(AgentBase):
             agent_output.flush()
 
             try:
-                agent_data: jsonrpc.JSONType = json.loads(line.decode("utf-8"))
+                line_str = line.decode("utf-8")
             except Exception as error:
-                print(error)
-                # TODO: handle this
-                raise
+                print("Unable to decode utf-8from agent:", error)
+                continue
+
+            try:
+                agent_data: jsonrpc.JSONType = json.loads(line_str)
+            except Exception as error:
+                print("Error decodeing JSON from agent:", error)
+                continue
 
             log(agent_data)
 
@@ -422,6 +427,10 @@ class Agent(AgentBase):
                 ):
                     API.process_response(agent_data)
                     continue
+
+            if not isinstance(agent_data, dict):
+                print("Invalid JSON from agent:", repr(agent_data))
+                continue
 
             # By this point we know it is a JSON RPC call
             assert isinstance(agent_data, dict)
