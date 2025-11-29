@@ -1,7 +1,9 @@
 # Schema defined in agent_schema.py
 # https://github.com/tao12345666333/amp-acp
 
-active = false
+# TODO: To be populated by Huggingface
+
+active = true
 identity = "inference.huggingface.io"
 name = "Huggingface Inference"
 short_name = "hf"
