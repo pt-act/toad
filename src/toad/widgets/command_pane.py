@@ -51,6 +51,7 @@ class CommandPane(Terminal):
 
     def execute(self, command: str, *, final: bool = True) -> asyncio.Task:
         self._execute_task = asyncio.create_task(self._execute(command, final=final))
+        self.anchor()
         return self._execute_task
 
     def on_resize(self, event: events.Resize):
@@ -63,12 +64,12 @@ class CommandPane(Terminal):
         if self._master is None:
             return
         width, height = self.scrollable_content_region.size
-        self.update_size(width, height)
         try:
             size = struct.pack("HHHH", height, width, 0, 0)
             fcntl.ioctl(self._master, termios.TIOCSWINSZ, size)
         except OSError:
             pass
+        self.update_size(width, height)
 
     @property
     def is_cooked(self) -> bool:
@@ -136,12 +137,15 @@ class CommandPane(Terminal):
             os.fdopen(os.dup(master), "wb", 0),
         )
         unicode_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-
         try:
             while True:
                 data = await shell_read(reader, BUFFER_SIZE)
                 if line := unicode_decoder.decode(data, final=not data):
-                    self.write(line)
+                    try:
+                        self.write(line)
+                    except Exception as error:
+                        print(error)
+
                 if not data:
                     break
         finally:
@@ -166,10 +170,10 @@ if __name__ == "__main__":
     COMMAND = os.environ["SHELL"]
     # COMMAND = "python test_input.py"
 
-    COMMAND = "htop"
-    COMMAND = "python test_scroll_margins.py"
-    COMMAND = "python table_movie.py"
-    COMMAND = "python"
+    # COMMAND = "htop"
+    # COMMAND = "python test_scroll_margins.py"
+
+    COMMAND = "claude"
 
     class CommandApp(App):
         CSS = """
@@ -185,6 +189,14 @@ if __name__ == "__main__":
             border: tab $text-primary;            
             margin: 0 2;
         }
+        # CommandPane {
+        #     width: 1fr;
+        #     height: 1fr;
+        #     # background: black 10%;
+        #     # color: white;
+        #     background: ansi_default;
+        #     # color: ansi_default;
+        # }
         """
 
         def compose(self) -> ComposeResult:
@@ -193,7 +205,7 @@ if __name__ == "__main__":
         def on_mount(self) -> None:
             command_pane = self.query_one(CommandPane)
             command_pane.border_title = COMMAND
-            self.call_after_refresh(command_pane.execute, COMMAND)
+            command_pane.execute(COMMAND)
 
     app = CommandApp()
     app.run()

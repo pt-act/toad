@@ -76,7 +76,6 @@ class LauncherGridSelect(GridSelect):
     app = getters.app(ToadApp)
     BINDINGS = [
         Binding("enter", "select", "Details", tooltip="Open agent details"),
-        # Binding("r", "remove", "Remove", tooltip="Remove agent from launcher"),
         Binding("space", "launch", "Lauch", tooltip="Launch highlighted agent"),
     ]
 
@@ -138,20 +137,26 @@ class Launcher(containers.VerticalGroup):
         return self
 
     def compose(self) -> ComposeResult:
-        launcher_set = frozenset(
-            self.app.settings.get("launcher.agents", str).splitlines()
+        launcher_agents = list(
+            dict.fromkeys(
+                identity
+                for identity in self.app.settings.get(
+                    "launcher.agents", str
+                ).splitlines()
+                if identity.strip()
+            )
         )
         agents = self._agents
-        self.set_class(not launcher_set, "-empty")
+        self.set_class(not launcher_agents, "-empty")
         with LauncherGridSelect(
             id="launcher-grid-select", min_column_width=32, max_column_width=32
         ):
-            for digit, identity in zip_longest(self.DIGITS, launcher_set):
+            for digit, identity in zip_longest(self.DIGITS, launcher_agents):
                 if identity is None:
                     break
                 yield LauncherItem(digit or "", agents[identity])
 
-        if not launcher_set:
+        if not launcher_agents:
             yield widgets.Label("Chose your fighter below!", classes="no-agents")
 
 

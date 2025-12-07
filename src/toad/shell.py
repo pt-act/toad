@@ -135,6 +135,10 @@ class Shell:
 
         shell = self.shell
 
+        def setup_pty():
+            os.setsid()
+            fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+
         try:
             _process = await asyncio.create_subprocess_shell(
                 shell,
@@ -143,7 +147,7 @@ class Shell:
                 stderr=slave,
                 env=env,
                 cwd=current_directory,
-                start_new_session=True,  # Linux / macOS only
+                preexec_fn=setup_pty,
             )
         except Exception as error:
             self.conversation.notify(

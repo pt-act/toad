@@ -21,14 +21,15 @@ async def shell_read(
         Bytes read. May be empty on the last read.
     """
     data = await reader.read(buffer_size)
-
     if data and buffer_period is not None:
         buffer_time = monotonic() + max_buffer_duration
         try:
             while len(data) < buffer_size and (time := monotonic()) < buffer_time:
                 async with asyncio.timeout(min(buffer_time - time, buffer_period)):
-                    data += await reader.read(buffer_size - len(data))
+                    if chunk := await reader.read(buffer_size - len(data)):
+                        data += chunk
+                    else:
+                        break
         except asyncio.TimeoutError:
             pass
-
     return data

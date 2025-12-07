@@ -212,6 +212,7 @@ class Terminal(ScrollView, can_focus=True):
         Returns:
             `True` if the state visuals changed, `False` if no visual change.
         """
+
         scrollback_delta, alternate_delta = self.state.write(text)
         self._update_from_state(scrollback_delta, alternate_delta)
         scrollback_changed = bool(scrollback_delta is None or scrollback_delta)
@@ -413,7 +414,6 @@ class Terminal(ScrollView, can_focus=True):
 
     @property
     def allow_select(self) -> bool:
-        return False
         return not self.is_finalized
 
     def _encode_mouse_event_sgr(self, event: events.MouseEvent) -> str:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from bisect import bisect_right
 import io
 from itertools import accumulate
 import re
@@ -10,7 +9,6 @@ from functools import lru_cache
 from typing import Iterable, Literal, Mapping, NamedTuple
 
 import rich.repr
-from rich.cells import cell_len
 
 from textual import events
 from textual.color import Color
@@ -23,7 +21,6 @@ from toad.ansi._keys import TERMINAL_KEY_MAP, CURSOR_KEYS_APPLICATION
 from toad.ansi._control_codes import CONTROL_CODES
 from toad.ansi._sgr_styles import SGR_STYLES
 from toad.ansi._stream_parser import (
-    MatchToken,
     StreamParser,
     SeparatorToken,
     PatternToken,
@@ -272,7 +269,7 @@ class ANSIStyle(NamedTuple):
 
 @rich.repr.auto
 class ANSIClear(NamedTuple):
-    """Enumare for clearing the 'screen'."""
+    """Enumeration for clearing the 'screen'."""
 
     clear: ClearType
 
@@ -282,6 +279,8 @@ class ANSIClear(NamedTuple):
 
 @rich.repr.auto
 class ANSIScrollMargin(NamedTuple):
+    """Set the scroll margin."""
+
     top: int | None = None
     bottom: int | None = None
 
@@ -292,6 +291,8 @@ class ANSIScrollMargin(NamedTuple):
 
 @rich.repr.auto
 class ANSIScroll(NamedTuple):
+    """Scroll buffer."""
+
     direction: Literal[+1, -1]
     lines: int
 
@@ -317,6 +318,8 @@ MOUSE_FORMAT = Literal["normal", "utf8", "sgr", "urxvt"]
 
 
 class ANSIMouseTracking(NamedTuple):
+    """Set mouse tracking."""
+
     mode: Literal["none"] | MOUSE_TRACKING_MODES | None = None
     format: MOUSE_FORMAT | None = None
     focus_events: bool | None = None
@@ -649,6 +652,16 @@ class ANSIStream:
                         self.style = NULL_STYLE
                     else:
                         self.style += sgr_style
+                        # Special case to use widget background rather
+                        # than theme background
+                        if (
+                            sgr_style.background is not None
+                            and sgr_style.background.ansi == -1
+                        ):
+                            self.style = (
+                                Style(foreground=self.style.foreground)
+                                + sgr_style.without_color
+                            )
                     yield ANSIStyle(self.style)
                 else:
                     if (ansi_segment := self._parse_csi(csi)) is not None:
@@ -807,6 +820,11 @@ class Buffer:
 
         return (line_no, position)
 
+    @property
+    def is_blank(self) -> bool:
+        """Is this buffer blank (spaces in all lines)?"""
+        return not any(line.content.plain.strip() for line in self.lines)
+
     def update_cursor(self, line_no: int, cursor_line_offset: int) -> None:
         """Move the cursor to the given unfolded line and offset.
 
@@ -816,7 +834,6 @@ class Buffer:
             line_no: Unfolded line number.
             cursor_line_offset: Offset within the line.
         """
-        # print("in", self.cursor_line, self.cursor_offset)
         line = self.lines[line_no]
         fold_line_start = self.line_to_fold[line_no]
         position = 0
@@ -834,7 +851,6 @@ class Buffer:
         else:
             self.cursor_line = fold_line_start + len(line.folds) - 1
             self.cursor_offset = len(line.folds[-1].content)
-        # print("out", self.cursor_line, self.cursor_offset)
 
     def update_line(self, line_no: int) -> None:
         """Record an updated line.
@@ -1162,7 +1178,8 @@ class TerminalState:
             del buffer.folded_lines[folded_cursor_line + 1 :]
             self.update_line(buffer, cursor_line, line.content[:cursor_line_offset])
         else:
-            print(f"TODO: clear_buffer({clear!r})")
+            # print(f"TODO: clear_buffer({clear!r})")
+            buffer.clear(self.advance_updates())
 
     def scroll_buffer(self, direction: int, lines: int) -> None:
         """Scroll the buffer.
