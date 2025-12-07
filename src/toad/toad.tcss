@@ -126,6 +126,7 @@ SideBar Plan {
     }
 }
 
+
 Conversation {
     
         
@@ -338,8 +339,8 @@ Prompt {
         }
     }
 
-    # &.-not-ready {
-    #     opacity: 0.5;
+    # &.-not-ready {        
+    
     # }
 
     PathSearch {

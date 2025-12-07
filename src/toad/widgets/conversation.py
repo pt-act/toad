@@ -975,27 +975,10 @@ class Conversation(containers.Vertical):
         key, value = setting_item
         if key == "shell.allow_commands":
             self.shell_history.complete.add_words(value.split())
-        # if key == "llm.model":
-        #     self.conversation = llm.get_model(value).conversation()
 
     @work
     async def post_welcome(self) -> None:
-        pass
-        # from toad.widgets.welcome import Welcome
-
-        # await self.post(Welcome(classes="note", name="welcome"), anchor=False)
-
-        # await self.post(
-        #     Note(f"project directory is [$text-success]'{self.project_path!s}'"),
-        #     anchor=True,
-        # )
-
-        # await self.post(
-        #     Note(
-        #         f"project data directory is [$text-success]'{self.project_data_path!s}'"
-        #     ),
-        #     anchor=True,
-        # )
+        """Post any welcome content."""
 
     def watch_agent(self, agent: AgentBase | None) -> None:
         if agent is None:
