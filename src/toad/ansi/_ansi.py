@@ -564,8 +564,8 @@ class ANSIStream:
                         else cls.DISABLE_REPLACE_MODE
                     )
 
-                case ["6", _, "n"]:
-                    print("CPR")
+                case ["6", _, "n"]:                    
+                    return ANSICursorPositionRequest()                    
 
                 case _:
                     print("Unknown CSI (a)", repr(csi))
@@ -636,8 +636,6 @@ class ANSIStream:
                         print("Unknown CSI (b)", repr(csi))
                         return None
 
-        if csi == "[6n":
-            return ANSICursorPositionRequest()
         print("Unknown CSI (c)", repr(csi))
         return None
 
@@ -1473,7 +1471,7 @@ class TerminalState:
             case ANSICursorPositionRequest():
                 row = self.buffer.cursor_line + 1
                 column = self.buffer.cursor_offset + 1
-                self.write_stdin(f"[{row};{column}R")
+                self.write_stdin(f"\x1b[{row};{column}R")
 
             case _:
                 print("Unhandled", ansi_command)
