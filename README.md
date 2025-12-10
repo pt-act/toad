@@ -54,7 +54,7 @@ Progress has been good. So I would expect a release in December.
 
 ## Requirements
 
-Works on Linux and Mac. Windows support may lag behind, but will catch up.
+Works on Linux and Mac. Windows works with WSL.
 
 Any terminal will work, although if you are using the default terminal on macOS you will get a much reduced experience.
 I recommend [Ghostty](https://ghostty.org/) which is fully featured and has amazing performance.
@@ -67,14 +67,15 @@ Assuming you have [UV](https://docs.astral.sh/uv/getting-started/installation/) 
 uv run toad
 ```
 
-There will eventually be a nice UI for selecting your agent.
-For now you will need to specify an agent on the command line (see below).
-
-You should also specify a project directory with the `--project-dir` option. Here's an example:
+If your favorite agent isn't listed, you can use the `acp` subcommand:
 
 ```
-uv run toad acp "gemini --experimental-acp" --project-dir ~/sandbox
+uv run toad acp "gemini --experimental-acp"
 ```
+
+## Web terminal
+
+There is an experimental web server mode. Add `--serve` to the CLI command and click the URL in the terminal.
 
 ## Installing agents
 
@@ -83,34 +84,6 @@ Agents need to be installed separately, and require support for [ACP](https://ag
 You will need to install the agent and authenticate at least once with the agent's own CLI tool.
 After that you can use Toad to interact with it.
 
-### Gemini
-
-Gemini has ACP support out of the box:
-
-```
-uv run toad acp "gemini --experimental-acp"
-```
-
-### Claude
-
-Claude requires installation of [claude-code-acp](https://github.com/zed-industries/claude-code-acp) plus claude cli itself. Once installed, run:
-
-```
-uv run toad acp "claude-code-acp"
-```
-
-### Codex
-
-Codex requires [codex-acp](https://github.com/zed-industries/codex-acp). Once installed, run:
-
-```
-uv run toad acp "codex-acp"
-```
-
-### Other agents
-
-There are other agents that support ACP.
-Replace the command to launch them as above and they should work.
 
 ## Thanks
 
@@ -119,6 +92,7 @@ Thanks for being a part of this!
 See you in discussions.
 
 I'm also in the #toad channel on the [Textualize discord server](https://discord.gg/Enf6Z3qhVr).
+
 
 
 
