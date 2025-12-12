@@ -68,3 +68,7 @@ class Flash(Message):
     content: str | Content
     style: Literal["default", "warning", "success", "error"]
     duration: float | None = None
+
+
+class ProjectDirectoryUpdated(Message):
+    """The project directory may may changed."""

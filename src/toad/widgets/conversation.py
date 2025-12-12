@@ -628,6 +628,7 @@ class Conversation(containers.Vertical):
             await self._loading.remove()
         self._agent_response = None
         self._agent_thought = None
+        self.post_message(messages.ProjectDirectoryUpdated())
 
     @on(Menu.OptionSelected)
     async def on_menu_option_selected(self, event: Menu.OptionSelected) -> None:
@@ -1186,6 +1187,7 @@ class Conversation(containers.Vertical):
             await self.post(ShellResult(command))
             width, height = self.get_terminal_dimensions()
             await self.shell.send(command, width, height)
+            self.post_message(messages.ProjectDirectoryUpdated())
 
     def action_cursor_up(self) -> None:
         if not self.contents.displayed_children or self.cursor_offset == 0:

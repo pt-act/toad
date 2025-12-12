@@ -31,9 +31,6 @@ Your codebase, evolving at thought speed.
 
 '''
 
-[actions."*".test]
-command = '''echo "Hello, World!"'''
-description = "Test action"
 
 [actions."*".install]
 command = "curl -fsSL https://claude.ai/install.sh | bash &&  npm install -g @zed-industries/claude-code-acp"

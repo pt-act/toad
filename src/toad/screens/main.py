@@ -16,6 +16,7 @@ from textual.widget import Widget
 
 
 from toad.app import ToadApp
+from toad import messages
 from toad.agent_schema import Agent
 from toad.acp import messages as acp_messages
 from toad.widgets.plan import Plan
@@ -116,6 +117,10 @@ class MainScreen(Screen, can_focus=False):
                 MainScreen.project_path
             )
         yield Footer()
+
+    @on(messages.ProjectDirectoryUpdated)
+    async def on_project_directory_update(self) -> None:
+        await self.query_one(ProjectDirectoryTree).reload()
 
     @on(DirectoryTree.FileSelected, "ProjectDirectoryTree")
     def on_project_directory_tree_selected(self, event: Tree.NodeSelected):
