@@ -137,12 +137,23 @@ class PathSearch(containers.VerticalGroup):
 
     @work(thread=True)
     async def get_path_spec(self, git_ignore_path: Path) -> PathSpec | None:
-        if git_ignore_path.is_file():
-            spec_text = git_ignore_path.read_text()
-            spec = PathSpec.from_lines(
-                pathspec.patterns.GitWildMatchPattern, spec_text.splitlines()
-            )
-            return spec
+        """Get a path spec instance if there is a .gitignore file present.
+
+        Args:
+            git_ignore_path): Path to .gitignore.
+
+        Returns:
+            A `PathSpec` instance.
+        """
+        try:
+            if git_ignore_path.is_file():
+                spec_text = git_ignore_path.read_text()
+                spec = PathSpec.from_lines(
+                    pathspec.patterns.GitWildMatchPattern, spec_text.splitlines()
+                )
+                return spec
+        except OSError:
+            return None
         return None
 
     @work(exclusive=True)
