@@ -137,10 +137,15 @@ def acp(
 ) -> None:
     """Run an ACP client."""
 
+    from rich import print
+
     from toad.agent_schema import Agent as AgentData
 
+    command_name = command.split(" ", 1)[0].lower()
+    identity = f"{command_name}.custom.batrachian.ai"
+
     agent_data: AgentData = {
-        "identity": "toad.custom",
+        "identity": identity,
         "name": title or command.partition(" ")[0],
         "short_name": "agent",
         "url": "https://github.com/textualize/toad",
@@ -176,8 +181,6 @@ def acp(
         app = ToadApp(agent_data=agent_data, project_dir=project_dir)
         app.run()
         app.run_on_exit()
-
-    from rich import print
 
     print("")
     print("[bold magenta]Thanks for trying out Toad!")
