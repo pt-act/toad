@@ -83,7 +83,7 @@ class LauncherGridSelect(GridSelect):
         Binding(
             "space",
             "launch",
-            "Lauch",
+            "Launch",
             tooltip="Launch highlighted agent",
         ),
     ]
@@ -195,7 +195,7 @@ class LauncherItem(containers.VerticalGroup):
 class AgentGridSelect(GridSelect):
     BINDINGS = [
         Binding("enter", "select", "Details", tooltip="Open agent details"),
-        Binding("space", "launch", "Lauch", tooltip="Launch highlighted agent"),
+        Binding("space", "launch", "Launch", tooltip="Launch highlighted agent"),
     ]
     BINDING_GROUP_TITLE = "Agent Select"
 
