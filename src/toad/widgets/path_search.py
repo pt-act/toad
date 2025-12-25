@@ -5,11 +5,9 @@ import asyncio
 from functools import lru_cache
 from operator import itemgetter
 from pathlib import Path
-import re
+import re2 as re
 from typing import Sequence
 
-import pathspec.patterns
-from pathspec import PathSpec
 
 from textual import on
 from textual.app import ComposeResult
@@ -27,6 +25,7 @@ from textual.widgets.option_list import Option
 from toad import directory
 from toad.fuzzy import FuzzySearch
 from toad.messages import Dismiss, InsertPath, PromptSuggestion
+from toad.path_filter import PathFilter
 
 
 class PathFuzzySearch(FuzzySearch):
@@ -180,25 +179,10 @@ class PathSearch(containers.VerticalGroup):
     def watch_root(self, root: Path) -> None:
         pass
 
-    def get_path_spec(self, git_ignore_path: Path) -> PathSpec | None:
-        """Get a path spec instance if there is a .gitignore file present.
-
-        Args:
-            git_ignore_path): Path to .gitignore.
-
-        Returns:
-            A `PathSpec` instance.
-        """
-        try:
-            if git_ignore_path.is_file():
-                spec_text = git_ignore_path.read_text()
-                spec = PathSpec.from_lines(
-                    pathspec.patterns.GitWildMatchPattern, spec_text.splitlines()
-                )
-                return spec
-        except OSError:
-            return None
-        return None
+    def get_path_filter(self, project_path: Path) -> PathFilter:
+        path_filter = PathFilter.from_git_root(project_path)
+        print(path_filter)
+        return path_filter
 
     @work(exclusive=True)
     async def load_paths(self) -> None:
@@ -207,10 +191,10 @@ class PathSearch(containers.VerticalGroup):
         root = self.root
 
         self.loading = True
-
-        path_spec = await asyncio.to_thread(self.get_path_spec, root / ".gitignore")
-        # path_spec = await self.get_path_spec(root / ".gitignore").wait()
-        paths = await directory.scan(root, path_spec=path_spec, add_directories=True)
+        path_filter = await asyncio.to_thread(self.get_path_filter, root)
+        paths = await directory.scan(
+            root, path_filter=path_filter, add_directories=True
+        )
 
         paths = [path.absolute() for path in paths]
         # paths.sort(key=lambda path: (len(path.parts), str(path).lower()))

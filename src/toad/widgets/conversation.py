@@ -261,6 +261,7 @@ class Conversation(containers.Vertical):
         self._agent_thought: AgentThought | None = None
         self._last_escape_time: float = monotonic()
         self._agent_data = agent
+        self._agent_fail = False
         self._mouse_down_offset: Offset | None = None
 
         self._focusable_terminals: list[Terminal] = []
@@ -524,11 +525,13 @@ class Conversation(containers.Vertical):
                 "agent-session-end",
                 agent=self._agent_data["identity"],
                 duration=session_time,
+                agent_session_fail=self._agent_fail,
             ).wait()
 
     @on(AgentFail)
     async def on_agent_fail(self, message: AgentFail) -> None:
         self.agent_ready = True
+        self._agent_fail = True
         self.notify(message.message, title="Agent failure", severity="error", timeout=5)
 
         if self._agent_data is not None:
