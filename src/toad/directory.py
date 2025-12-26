@@ -47,9 +47,11 @@ class ScanJob:
             if add_directories:
                 results.extend(dir_paths)
             results.extend(paths)
-            for path in dir_paths:
-                await queue.put(path)
-
+            try:
+                for path in dir_paths:
+                    await queue.put(path)
+            except asyncio.QueueShutDown:
+                break
             queue.task_done()
 
     def _scan_directory(
@@ -70,7 +72,12 @@ class ScanJob:
             paths = []
         if path_filter is not None:
             paths = list(filterfalse(path_filter.match, paths))
-        paths, dir_paths = partition(Path.is_dir, paths)
+
+        try:
+            paths, dir_paths = partition(Path.is_dir, paths)
+        except IOError:
+            paths = []
+            dir_paths = []
         return paths, dir_paths
 
 
@@ -80,12 +87,16 @@ async def scan(
     max_simultaneous: int = 5,
     path_filter: PathFilter | None = None,
     add_directories: bool = False,
+    max_duration: float | None = 5.0,
 ) -> list[Path]:
     """Scan a directory for paths.
 
     Args:
         root: Root directory to scan.
         max_simultaneous: Maximum number of scan jobs.
+        path_filter: Path filter object.
+        add_directories: Also collect directories?
+        max_duration: Maximum time in seconds to scan for, or `None` for no maximum.
 
     Returns:
         A list of Paths.
@@ -106,7 +117,14 @@ async def scan(
         await queue.put(root)
         for job in jobs:
             job.start()
-        await queue.join()
+        if max_duration is not None:
+            try:
+                async with asyncio.timeout(max_duration):
+                    await queue.join()
+            except asyncio.TimeoutError:
+                pass
+        else:
+            await queue.join()
     except asyncio.CancelledError:
         await queue.join()
     queue.shutdown(immediate=True)

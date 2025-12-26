@@ -24,9 +24,12 @@ def load_path_spec(git_ignore_path: Path) -> GitIgnoreSpec | None:
             except Exception:
                 # Permissions, encoding issue?
                 return None
-            spec = GitIgnoreSpec.from_lines(
-                pathspec.patterns.GitWildMatchPattern, spec_text.splitlines()
-            )
+            try:
+                spec = GitIgnoreSpec.from_lines(
+                    pathspec.patterns.GitWildMatchPattern, spec_text.splitlines()
+                )
+            except Exception:
+                return None
             return spec
     except OSError:
         return None
@@ -66,6 +69,8 @@ class PathFilter:
                 if (path / ".git").is_dir():
                     break
                 path = parent
+            else:
+                del path_specs[:]
         except OSError:
             pass
         return PathFilter(filter_root, reversed(path_specs))
