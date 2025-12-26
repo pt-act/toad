@@ -15,6 +15,7 @@ from textual.binding import Binding
 from textual import work
 from textual import getters
 from textual import containers
+from textual import events
 from textual.reactive import var, Initialize
 from textual.content import Content, Span
 from textual.widget import Widget
@@ -128,6 +129,7 @@ class PathSearch(containers.VerticalGroup):
         scores = sorted(
             [score for score in scores if score[0]], key=itemgetter(0), reverse=True
         )
+        scores = scores[:20]
 
         def highlight_offsets(path: Content, offsets: Sequence[int]) -> Content:
             return path.add_spans(
@@ -249,7 +251,7 @@ class PathSearch(containers.VerticalGroup):
             [
                 Option(highlighted_path, id=highlighted_path.plain)
                 for highlighted_path in self.highlighted_paths
-            ],
+            ][:20]
         )
         self.option_list.highlighted = 0
         self.post_message(PromptSuggestion(""))
