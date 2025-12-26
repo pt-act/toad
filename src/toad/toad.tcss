@@ -620,7 +620,7 @@ Explain {
 Footer {
     background: transparent;
     .footer-key--key {
-        color: $text;
+        color: $accent;
         background: transparent;
         # text-style: not bold;
         padding: 0 1;        
