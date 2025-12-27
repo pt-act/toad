@@ -330,24 +330,11 @@ class PathSearch(containers.VerticalGroup):
         return LoadingIndicator()
 
     def highlight_path(self, path: str) -> Content:
-        if os.path.split(path)[-1].startswith("."):
-            return Content.styled(path, "dim")
         content = Content.styled(path, "dim $text")
+        if os.path.split(path)[-1].startswith("."):
+            return content
         content = content.highlight_regex("[^/]*?$", style="not dim $text-primary")
         content = content.highlight_regex(r"\.[^/]*$", style="italic")
-        return content
-
-        if path.startswith("."):
-            return content.stylize("dim")
-        if not path.endswith("/"):
-            if "/" in path:
-                # Last file
-                content = content.stylize("$text", path.rfind("/") + 1)
-            else:
-                pass
-                # content = content.stylize("$text-success dim")
-        if (match := re.search(r"\.(.*$)", content.plain)) is not None:
-            content = content.stylize("not dim", match.start(1), match.end(1))
         return content
 
     def watch_paths(self, paths: list[Path]) -> None:
