@@ -326,7 +326,12 @@ class Conversation(containers.Vertical):
 
     @on(events.Key)
     async def on_key(self, event: events.Key):
-        if event.is_printable and self.window.has_focus:
+        if (
+            event.character is not None
+            and event.is_printable
+            and event.character.isalnum()
+            and self.window.has_focus
+        ):
             self.prompt.focus()
             self.prompt.prompt_text_area.post_message(event)
 

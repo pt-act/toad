@@ -181,7 +181,7 @@ class ToolCall(containers.VerticalGroup):
             else:
                 expand_icon = Content("▶ ")
         else:
-            expand_icon = Content.styled("▶ ", "dim")
+            expand_icon = Content.styled("▶ ", "$text 20%")
 
         # header = Content.assemble(
         #     expand_icon,
