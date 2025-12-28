@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.10] - 2025-12-28
+
+### Added
+
+- Added a tree view to file picker
+
 ## [0.5.9] - 2025-12-27
 
 ### Changed
@@ -50,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - First release. This document will be updated for subsequent releases.
 
+[0.5.10]: https://github.com/Textualize/textual/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/Textualize/textual/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/Textualize/textual/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/Textualize/textual/compare/v0.5.6...v0.5.7
