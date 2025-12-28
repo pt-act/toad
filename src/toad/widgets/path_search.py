@@ -214,7 +214,8 @@ class PathSearch(containers.VerticalGroup):
                 for index, (score, offsets, path) in enumerate(scores)
             ]
         )
-        self.option_list.highlighted = 0
+        with self.option_list.prevent(OptionList.OptionHighlighted):
+            self.option_list.highlighted = 0
         self.post_message(PromptSuggestion(""))
 
     def action_cursor_down(self) -> None:
@@ -372,5 +373,6 @@ class PathSearch(containers.VerticalGroup):
                 for highlighted_path in self.highlighted_paths
             ][:100]
         )
-        self.option_list.highlighted = 0
+        with self.option_list.prevent(OptionList.OptionHighlighted):
+            self.option_list.highlighted = 0
         self.post_message(PromptSuggestion(""))
