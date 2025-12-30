@@ -31,6 +31,13 @@ Toad is a terminal application.
 Any terminal will work, although if you are using the default terminal on macOS you will get a much reduced experience.
 I recommend [Ghostty](https://ghostty.org/) which is fully featured and has amazing performance.
 
+## Clipboard
+
+On Linux, you may need to install `xclip` to enable clipboard support.
+
+```
+sudo apt install xclip
+```
 
 ## Getting Started
 

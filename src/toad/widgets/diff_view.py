@@ -258,8 +258,8 @@ class DiffView(containers.VerticalGroup):
         super().__init__(name=name, id=id, classes=classes, disabled=disabled)
         self.set_reactive(DiffView.path1, path1)
         self.set_reactive(DiffView.path2, path2)
-        self.set_reactive(DiffView.code_before, code_before)
-        self.set_reactive(DiffView.code_after, code_after)
+        self.set_reactive(DiffView.code_before, code_before.expandtabs())
+        self.set_reactive(DiffView.code_after, code_after.expandtabs())
         self._grouped_opcodes: list[list[tuple[str, int, int, int, int]]] | None = None
         self._highlighted_code_lines: tuple[list[Content], list[Content]] | None = None
 
@@ -614,8 +614,8 @@ class DiffView(containers.VerticalGroup):
 if __name__ == "__main__":
     SOURCE1 = '''\
 def loop_first(values: Iterable[T]) -> Iterable[tuple[bool, T]]:
-    """Iterate and generate a tuple with a flag for first value."""
-    iter_values = iter(values)
+\t"""Iterate and generate a tuple with a flag for first value."""
+\titer_values = iter(values)
     try:
         value = next(iter_values)
     except StopIteration:
