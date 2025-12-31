@@ -382,6 +382,35 @@ class Agent(AgentBase):
         return_code, signal = result_future.result()
         return {"exitCode": return_code, "signal": signal}
 
+    @jsonrpc.expose("toad/create_orchestrator_terminal")
+    async def rpc_toad_create_orchestrator_terminal(
+        self,
+        sessionId: str,
+        role: str | None = None,
+        cwd: str | None = None,
+        _meta: dict | None = None,
+    ) -> dict[str, Any]:
+        """Toad-specific helper to create an AI-managed orchestrator terminal.
+
+        This is a convenience wrapper around terminal/create that uses the
+        project root as the default cwd and the current shell as the command.
+        """
+        shell = os.environ.get("SHELL", "sh")
+        env: list[protocol.EnvVariable] | None = None
+        if role:
+            env = [{"name": "TOAD_ORCHESTRATOR_ROLE", "value": role}]  # type: ignore[assignment]
+
+        response = await self.rpc_terminal_create(
+            command=shell,
+            _meta=_meta,
+            args=None,
+            cwd=cwd or str(self.project_root_path),
+            env=env,
+            outputByteLimit=None,
+            sessionId=sessionId,
+        )
+        return {"terminalId": response["terminalId"], "role": role or "orchestrator"}
+
     async def _run_agent(self) -> None:
         """Task to communicate with the agent subprocess."""
 

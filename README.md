@@ -127,7 +127,29 @@ You can also launch multi-agent sessions from the Store screen:
 - A status line below the launcher shows the current team members.
 - Press `L` (on the Store screen) to launch a session with the selected team.
   - The first team member is treated as the primary agent for display.
-  - The full team runs together as a multi-agent session.bash
+  - The full team runs together as a multi-agent session.
+
+### AI-managed “orchestrator” terminals
+
+Agents running under ACP can request fully AI-managed terminals inside the
+conversation. These are useful as dedicated workspaces for running commands,
+tests, or other tools while keeping the main conversation focused on planning
+and explanation.
+
+Under the hood, this is powered by the ACP `terminal/*` tools. For agents that
+are aware of Toad, a small helper tool is also available:
+
+- `toad/create_orchestrator_terminal(sessionId, role, cwd)`  
+  - `role` (optional): a free-form label such as `"worker"`, `"validator"`, etc.
+  - `cwd` (optional): working directory for the terminal (defaults to the project root).
+  - Returns: `{"terminalId": "...", "role": "..."}`.
+
+Once created, the orchestrator terminal is displayed in the conversation and can
+be managed entirely by the AI via the standard ACP terminal tools:
+`terminal/output`, `terminal/wait_for_exit`, `terminal/kill`, and
+`terminal/release`. On the Toad side, these terminals integrate with the normal
+terminal UX (for example, `ctrl+f` will focus the most recent non-finalized
+terminal).bash
 toad --help
 ```
 
