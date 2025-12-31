@@ -147,13 +147,25 @@ class Agent(AgentBase):
                 "sessionUpdate": "agent_message_chunk",
                 "content": {"type": type, "text": text},
             }:
-                self.post_message(messages.Update(type, text))
+                self.post_message(
+                    messages.Update(
+                        type,
+                        text,
+                        agent_identity=self._agent_data["identity"],
+                    )
+                )
 
             case {
                 "sessionUpdate": "agent_thought_chunk",
                 "content": {"type": type, "text": text},
             }:
-                self.post_message(messages.Thinking(type, text))
+                self.post_message(
+                    messages.Thinking(
+                        type,
+                        text,
+                        agent_identity=self._agent_data["identity"],
+                    )
+                )
 
             case {
                 "sessionUpdate": "tool_call",

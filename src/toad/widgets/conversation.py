@@ -730,16 +730,30 @@ class Conversation(containers.Vertical):
     async def on_update_status_line(self, message: acp_messages.UpdateStatusLine):
         self.status = message.status_line
 
+    def _agent_name_for_identity(self, identity: str) -> str:
+        for agent_data in self._agents_data:
+            if agent_data["identity"] == identity:
+                return agent_data.get("short_name") or agent_data["name"]
+        return identity
+
     @on(acp_messages.Update)
     async def on_acp_agent_message(self, message: acp_messages.Update):
         message.stop()
         self._agent_thought = None
-        await self.post_agent_response(message.text)
+        text = message.text
+        if message.agent_identity and len(self._agents_data) > 1:
+            name = self._agent_name_for_identity(message.agent_identity)
+            text = f"[{name}] {text}"
+        await self.post_agent_response(text)
 
     @on(acp_messages.Thinking)
     async def on_acp_agent_thinking(self, message: acp_messages.Thinking):
         message.stop()
-        await self.post_agent_thought(message.text)
+        text = message.text
+        if message.agent_identity and len(self._agents_data) > 1:
+            name = self._agent_name_for_identity(message.agent_identity)
+            text = f"[{name}] {text}"
+        await self.post_agent_thought(text)
 
     @on(acp_messages.RequestPermission)
     async def on_acp_request_permission(self, message: acp_messages.RequestPermission):
