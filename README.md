@@ -105,6 +105,32 @@ To see all subcommands and switches, add the `--help` switch:
 toad --help
 ```
 
+### Multi-agent sessions
+
+Toad can run multiple ACP agents concurrently in a single conversation.
+
+You can start a multi-agent session from the CLI by passing a comma-separated list
+of agents to `-a`:
+
+```bash
+toad -a open-hands,claude.com,goose.ai
+```
+
+- All listed agents are started in the same project directory.
+- Prompts you type are broadcast to every agent.
+- Responses and “thinking” streams are merged into a single conversation view.
+- In multi-agent sessions, messages are prefixed with the agent name (for example `[OpenHands]`, `[Claude]`) so you can see who produced each output.
+
+You can also launch multi-agent sessions from the Store screen:
+
+- Press `T` on agents in any list (Launcher, Recommended, Coding agents, Chat & more) to add/remove them from a **team**.
+- A status line below the launcher shows the current team members.
+- Press `L` (on the Store screen) to launch a session with the selected team.
+  - The first team member is treated as the primary agent for display.
+  - The full team runs together as a multi-agent session.bash
+toad --help
+```
+
 ### Web server
 
 You can run Toad as a web application.
@@ -130,7 +156,7 @@ Some planned features:
 - UI for MCP servers
 - Expose model selection (waiting on ACP update)
 - Sessions
-- Multiple agents
+- Richer multi-agent UI and coordination tools
 - Windows native support
 
 ### Reporting bugs

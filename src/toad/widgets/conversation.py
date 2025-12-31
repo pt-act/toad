@@ -891,6 +891,8 @@ class Conversation(containers.Vertical):
         except Exception:
             message.result_future.set_result(False)
         else:
+            # Treat ACP terminals as focusable so ctrl+f can jump to them.
+            self.add_focusable_terminal(terminal)
             message.result_future.set_result(True)
 
     @on(acp_messages.KillTerminal)

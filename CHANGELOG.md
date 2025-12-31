@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added optional os notifications
+- Multi-agent sessions:
+  - CLI support for launching multiple agents at once with `-a agent1,agent2,…`
+  - Store screen support for selecting a team of agents and launching them together
+- Agent-labelled output in multi-agent sessions (responses prefixed with agent name)
+- ACP terminals are now focusable via the existing `ctrl+f` terminal focus key
 
 ### Changed
 
