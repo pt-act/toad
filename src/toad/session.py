@@ -13,8 +13,9 @@ class SessionEvent(TypedDict, total=False):
     """An event in a session transcript."""
 
     timestamp: float
-    role: Literal["user", "agent"]
-    type: Literal["message"]
+    role: Literal["user", "agent", "shell"]
+    # message: user/agent text; shell_command: command; shell_output: output text
+    type: Literal["message", "shell_command", "shell_output"]
     text: str
     agent_identity: str | None
 
@@ -152,6 +153,27 @@ class SessionStore:
             return []
         records.sort(key=lambda r: r.get("started_at") or 0.0, reverse=True)
         return records
+
+    def rename_session(self, session_id: str, title: str) -> None:
+        """Rename a session (update its title)."""
+        if not self._sessions_path.exists():
+            return
+        try:
+            records = self.list_sessions(include_incomplete=True)
+            changed = False
+            for record in records:
+                if record.get("session_id") == session_id:
+                    record["title"] = title
+                    changed = True
+                    break
+            if not changed:
+                return
+            with self._sessions_path.open("w", encoding="utf-8") as sessions_file:
+                for record in records:
+                    sessions_file.write(json.dumps(record) + "\n")
+        except Exception:
+            # Non-fatal
+            return
 
     def load_events(self, session_id: str) -> list[SessionEvent]:
         """Load all events for a given session."""

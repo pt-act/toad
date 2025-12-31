@@ -652,8 +652,10 @@ class Conversation(containers.Vertical):
         if event.shell:
             await self.shell_history.append(event.body)
             self.shell_history_index = 0
-            await self.post_shell(event.body)
-        elif text := event.body.strip():
+            # Record shell command in the current session.
+            self.session_store.append_event(
+                SessionEvent(
+                    role="():
             await self.prompt_history.append(event.body)
             self.prompt_history_index = 0
             if text.startswith("/") and await self.slash_command(text):
@@ -996,17 +998,25 @@ class Conversation(containers.Vertical):
 
         from toad.widgets.user_input import UserInput as UserInputWidget
         from toad.widgets.agent_response import AgentResponse as AgentResponseWidget
+        from toad.widgets.shell_result import ShellResult
+        from textual.widgets import Static
 
-        # Rebuild a simple transcript: user prompts and agent messages.
+        # Rebuild a simple transcript: user prompts, agent messages, and shell activity.
         for event_data in events:
             role = event_data.get("role")
             text = event_data.get("text") or ""
+            event_type = event_data.get("type")
             if not text:
                 continue
-            if role == "user":
+            if role == "user" and event_type == "message":
                 await self.post(UserInputWidget(text), anchor=False)
-            elif role == "agent":
+            elif role == "agent" and event_type == "message":
                 await self.post(AgentResponseWidget(text), anchor=False)
+            elif role == "shell" and event_type == "shell_command":
+                await self.post(ShellResult(text), anchor=False)
+            elif role == "shell" and event_type == "shell_output":
+                # Render output as a simple Static block.
+                await self.post(Static(text, classes="shell-output"), anchor=False)
 
         self.window.scroll_end()
         self.flash("Session loaded. New messages will be appended here.", style="success")
@@ -1034,5 +1044,26 @@ class Conversation(containers.Vertical):
                 "A copy of /about-toad has been placed in your clipboard",
                 title="About",
             )
+            return True
+        if command == "rename-session":
+            title = parameters.strip()
+            if not title:
+                self.flash("Usage: /rename-session &lt;new title&gt;", style="warning")
+                return True
+            session_id = self.session_store.current_session_id
+            if session_id is None:
+                # Fall back to latest session for this project.
+                sessions = self.session_store.list_sessions()
+                session_id = sessions[0]["session_id"] if sessions else None
+            if session_id is None:
+                self.flash("No session to rename.", style="warning")
+                return True
+            self.session_store.rename_session(session_id, title)
+            # Refresh sessions panel if present.
+            from toad.widgets.sessions import Sessions
+
+            for sessions_widget in self.screen.query(Sessions):
+                await sessions_widget.reload()
+            self.flash(f"Session renamed to '{title}'", style="success")
             return True
         return False

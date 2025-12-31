@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from textual.message import Message
 
 from toad.shell_read import shell_read
-
+from toad.session import SessionEvent
 from toad.widgets.terminal import Terminal
 
 if TYPE_CHECKING:
@@ -216,6 +216,19 @@ class Shell:
                     self.conversation.post_message(
                         CurrentWorkingDirectoryChanged(current_directory)
                     )
+                # Record shell output in the current session.
+                try:
+                    self.conversation.session_store.append_event(
+                        SessionEvent(
+                            role="shell",
+                            type="shell_output",
+                            text=line,
+                            agent_identity=None,
+                        )
+                    )
+                except Exception:
+                    # Session recording is best-effort; ignore failures.
+                    pass
             if (
                 self.terminal is not None
                 and self.terminal.is_finalized
