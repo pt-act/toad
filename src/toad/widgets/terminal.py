@@ -213,7 +213,7 @@ class Terminal(ScrollView, can_focus=True):
             width, height = self._get_terminal_dimensions()
         self.update_size(width, height)
 
-    async def write(self, text: str, hide_output: bool) -> bool:
+    async def write(self, text: str, hide_output: bool=False) -> bool:
         """Write sequences to the terminal.
 
         Args:
