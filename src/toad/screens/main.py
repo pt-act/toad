@@ -24,6 +24,7 @@ from toad.widgets.throbber import Throbber
 from toad.widgets.conversation import Conversation
 from toad.widgets.project_directory_tree import ProjectDirectoryTree
 from toad.widgets.side_bar import SideBar
+from toad.widgets.sessions import Sessions
 
 
 class ModeProvider(Provider):
@@ -120,6 +121,12 @@ class MainScreen(Screen, can_focus=False):
                         id="project_directory_tree",
                     ),
                     flex=True,
+                ),
+                SideBar.Panel(
+                    "Sessions",
+                    Sessions(self.project_path),
+                    flex=True,
+                    id="sessions_panel",
                 ),
             )
             yield Conversation(self.project_path, self._agent, self._agents).data_bind(
