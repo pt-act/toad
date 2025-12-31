@@ -1041,7 +1041,7 @@ class Conversation(containers.Vertical):
                 transcript_lines.append(f"Shell output: {text}")
 
         # If the transcript is long, generate a summary that will be injected
-        # into the next prompt sent to the agent.
+        # into the next prompt sent to the agent and persisted in the summary chain.
         transcript = "\n".join(transcript_lines)
         if len(transcript) > 2000 and self.agent is not None:
             # Ask the agent itself to summarize the transcript.
@@ -1052,12 +1052,24 @@ class Conversation(containers.Vertical):
                 f"{transcript}"
             )
             try:
-                self._session_summary = await self.agent.send_prompt(summary_prompt)
-                self._session_summary_used = False
-                self.flash(
-                    "Session is long; a summary will be used as context for your next prompt.",
-                    style="information",
-                )
+                summary_text = await self.agent.send_prompt(summary_prompt)
+                # Persist this summary in the session summary chain.
+                current_session_id = self.session_store.current_session_id
+                if current_session_id is not None:
+                    self.session_store.append_summary(current_session_id, summary_text)
+                # Load all summaries (oldest first), then present newest first.
+                all_summaries = self.session_store.load_all_summaries(
+                    current_session_id
+                ) if current_session_id is not None else [summary_text]
+                if all_summaries:
+                    newest_first = list(reversed(all_summaries))
+                    composite_summary = "\n\n---\n\n".join(newest_first)
+                    self._session_summary = composite_summary
+                    self._session_summary_used = False
+                    self.flash(
+                        "Session is long; summaries will be used as context for your next prompt.",
+                        style="information",
+                    )
             except Exception:
                 self._session_summary = None
                 self._session_summary_used = False
