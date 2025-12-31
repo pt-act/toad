@@ -72,3 +72,10 @@ class Flash(Message):
 
 class ProjectDirectoryUpdated(Message):
     """The project directory may may changed."""
+
+
+@dataclass
+class SessionSelected(Message):
+    """A saved session was selected."""
+
+    session_id: str

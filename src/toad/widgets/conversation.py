@@ -40,6 +40,8 @@ from toad.acp.agent import Mode
 from toad.answer import Answer
 from toad.agent import AgentBase, AgentReady, AgentFail
 from toad.history import History
+from toad.session import SessionStore, SessionEvent
+from toad.messages import SessionSelected
 from toad.widgets.flash import Flash
 from toad.widgets.menu import Menu
 from toad.widgets.note import Note
@@ -290,6 +292,7 @@ class Conversation(containers.Vertical):
         self.project_data_path = paths.get_project_data(project_path)
         self.shell_history = History(self.project_data_path / "shell_history.jsonl")
         self.prompt_history = History(self.project_data_path / "prompt_history.jsonl")
+        self.session_store = SessionStore(self.project_data_path)
 
         self.session_start_time: float | None = None
 
@@ -559,6 +562,9 @@ class Conversation(containers.Vertical):
                         "agent-session-begin",
                         agent=agent_data["identity"],
                     )
+            # Start a new stored session the first time the agent becomes ready.
+            agent_identities = [agent_data["identity"] for agent_data in self._agents_data]
+            self.session_store.start_new_session(self.project_path, agent_identities)
 
         self.agent_ready = True
 
@@ -574,6 +580,10 @@ class Conversation(containers.Vertical):
                     duration=session_time,
                     agent_session_fail=self._agent_fail,
                 ).wait()
+        # Finalize stored session metadata.
+        if self._agent_fail:
+            self.session_store.mark_fail()
+        self.session_store.end_current_session()
 
     @on(AgentFail)
     async def on_agent_fail(self, message: AgentFail) -> None:
@@ -650,6 +660,15 @@ class Conversation(containers.Vertical):
                 # Toad has processed the slash command.
                 return
             await self.post(UserInput(text))
+            # Record user prompt in the current session.
+            self.session_store.append_event(
+                SessionEvent(
+                    role="user",
+                    type="message",
+                    text=text,
+                    agent_identity=None,
+                )
+            )
             self._loading = await self.post(Loading("Please wait..."), loading=True)
             await asyncio.sleep(0)
             self.send_prompt_to_agent(text)
@@ -741,10 +760,20 @@ class Conversation(containers.Vertical):
         message.stop()
         self._agent_thought = None
         text = message.text
-        if message.agent_identity and len(self._agents_data) > 1:
-            name = self._agent_name_for_identity(message.agent_identity)
+        agent_identity = message.agent_identity or ""
+        if agent_identity and len(self._agents_data) > 1:
+            name = self._agent_name_for_identity(agent_identity)
             text = f"[{name}] {text}"
         await self.post_agent_response(text)
+        # Record agent message in the current session.
+        self.session_store.append_event(
+            SessionEvent(
+                role="agent",
+                type="message",
+                text=message.text,
+                agent_identity=agent_identity or None,
+            )
+        )
 
     @on(acp_messages.Thinking)
     async def on_acp_agent_thinking(self, message: acp_messages.Thinking):
@@ -947,541 +976,40 @@ class Conversation(containers.Vertical):
         )
         return False
 
-    @on(acp_messages.SetModes)
-    async def on_acp_set_modes(self, message: acp_messages.SetModes):
-        self.modes = message.modes
-        self.log(self.modes)
-        self.current_mode = self.modes[message.current_mode]
-
-    @on(messages.HistoryMove)
-    async def on_history_move(self, message: messages.HistoryMove) -> None:
+    @on(SessionSelected)
+    async def on_session_selected(self, message: SessionSelected) -> None:
+        """Load a saved session transcript into the current conversation."""
         message.stop()
-        if message.shell or not message.body.strip():
-            await self.shell_history.open()
-
-            if self.shell_history_index == 0:
-                current_shell_command = ""
-            else:
-                current_shell_command = (
-                    await self.shell_history.get_entry(self.shell_history_index)
-                )["input"]
-            while True:
-                self.shell_history_index += message.direction
-                new_entry = await self.shell_history.get_entry(self.shell_history_index)
-                if (new_entry)["input"] != current_shell_command:
-                    break
-                if message.direction == +1 and self.shell_history_index == 0:
-                    break
-                if (
-                    message.direction == -1
-                    and self.shell_history_index <= -self.shell_history.size
-                ):
-                    break
-
-    @work
-    async def request_permissions(
-        self,
-        result_future: Future[Answer],
-        options: list[Answer],
-        tool_call_update: acp_protocol.ToolCallUpdatePermissionRequest,
-    ) -> None:
-        kind = tool_call_update.get("kind")
-
-        title: str | None = None
-        if kind is None:
-            from toad.widgets.tool_call import ToolCall
-
-            if (contents := tool_call_update.get("content")) is not None:
-                title = tool_call_update.get("title")
-                for content in contents:
-                    match content:
-                        case {"type": "text", "content": {"text": text}}:
-                            await self.post(ToolCall(text))
-
-            def answer_callback(answer: Answer) -> None:
-                result_future.set_result(answer)
-
-            self.ask(options, title or "", answer_callback)
+        events = self.session_store.load_events(message.session_id)
+        if not events:
+            self.flash("No transcript available for this session", style="warning")
             return
 
-        if kind == "edit":
-            from toad.screens.permissions import PermissionsScreen
+        # Resume this session for future events.
+        self.session_store.resume_session(message.session_id)
 
-            async def populate(screen: PermissionsScreen) -> None:
-                if (contents := tool_call_update.get("content")) is None:
-                    return
-                for content in contents:
-                    match content:
-                        case {
-                            "type": "diff",
-                            "oldText": old_text,
-                            "newText": new_text,
-                            "path": path,
-                        }:
-                            await screen.add_diff(path, path, old_text, new_text)
-
-            permissions_screen = PermissionsScreen(options, populate_callback=populate)
-            result = await self.app.push_screen_wait(permissions_screen)
-            result_future.set_result(result)
-        else:
-            title = tool_call_update.get("title", "") or ""
-
-            def answer_callback(answer: Answer) -> None:
-                result_future.set_result(answer)
-
-            self.ask(options, title, answer_callback)
-
-    async def post_tool_call(
-        self, tool_call_update: acp_protocol.ToolCallUpdate
-    ) -> None:
-        if (contents := tool_call_update.get("content")) is None:
-            return
-
-        for content in contents:
-            match content:
-                case {
-                    "type": "diff",
-                    "oldText": old_text,
-                    "newText": new_text,
-                    "path": path,
-                }:
-                    await self.post_diff(path, old_text, new_text)
-
-    async def post_diff(self, path: str, before: str | None, after: str) -> None:
-        """Post a diff view.
-
-        Args:
-            path: Path to the file.
-            before: Content of file before edit.
-            after: Content of file after edit.
-        """
-        from toad.widgets.diff_view import DiffView
-
-        diff_view = DiffView(path, path, before or "", after, classes="block")
-        diff_view_setting = self.app.settings.get("diff.view", str)
-        diff_view.split = diff_view_setting == "split"
-        diff_view.auto_split = diff_view_setting == "auto"
-        await self.post(diff_view)
-
-    def ask(
-        self,
-        options: list[Answer],
-        question: str = "",
-        callback: Callable[[Answer], Any] | None = None,
-    ) -> None:
-        """Replace the prompt with a dialog to ask a question
-
-        Args:
-            question: Question to ask or empty string to omit.
-            options: A list of (ANSWER, ANSWER_ID) tuples.
-            callback: Optional callable that will be invoked with the result.
-        """
-        from toad.widgets.question import Ask
-
-        self.agent_info
-
-        if self.agent_title:
-            notify_title = f"[{self.agent_title}] {question}"
-        else:
-            notify_title = question
-        notify_message = "\n".join(f" • {option.text}" for option in options)
-        self.app.system_notify(notify_message, title=notify_title)
-
-        self.prompt.ask(Ask(question, options, callback))
-
-    def _build_slash_commands(self) -> list[SlashCommand]:
-        slash_commands = [
-            SlashCommand("/about-toad", "About Toad"),
-        ]
-        slash_commands.extend(self.agent_slash_commands)
-        deduplicated_slash_commands = {
-            slash_command.command: slash_command for slash_command in slash_commands
-        }
-        slash_commands = sorted(
-            deduplicated_slash_commands.values(), key=attrgetter("command")
-        )
-        return slash_commands
-
-    def update_slash_commands(self) -> None:
-        """Update slash commands, which may have changed since mounting."""
-        self.prompt.slash_commands = self._build_slash_commands()
-
-    async def on_mount(self) -> None:
-        self.prompt.focus()
-        self.prompt.slash_commands = self._build_slash_commands()
-        self.call_after_refresh(self.post_welcome)
-        self.app.settings_changed_signal.subscribe(self, self._settings_changed)
-        # self.shell.start()
-
-        self.shell_history.complete.add_words(
-            self.app.settings.get("shell.allow_commands", expect_type=str).split()
-        )
-
-        if self._agents_data:
-
-            def start_agent() -> None:
-                """Start the agent after refreshing the UI."""
-                from toad.acp.agent import Agent as AcpAgent
-                from toad.multi_agent import MultiAgent
-
-                if len(self._agents_data) == 1:
-                    self.agent = AcpAgent(self.project_path, self._agents_data[0])
-                else:
-                    self.agent = MultiAgent(self.project_path, self._agents_data)
-                self.agent.start(self)
-
-            self.call_after_refresh(start_agent)
-
-        else:
-            self.agent_ready = True
-
-    def _settings_changed(self, setting_item: tuple[str, str]) -> None:
-        key, value = setting_item
-        if key == "shell.allow_commands":
-            self.shell_history.complete.add_words(value.split())
-
-    @work
-    async def post_welcome(self) -> None:
-        """Post any welcome content."""
-
-    def watch_agent(self, agent: AgentBase | None) -> None:
-        if agent is None:
-            self.agent_info = Content.styled("shell")
-        else:
-            self.agent_info = agent.get_info()
-            self.agent_ready = False
-
-    async def watch_agent_ready(self, ready: bool) -> None:
-        if ready and self._agents_data:
-            from toad.widgets.markdown_note import MarkdownNote
-
-            for agent_data in self._d.widgets.markdown_note import MarkdownNote
-
-            await self.post(MarkdownNote(welcome))
-
-    def on_mouse_down(self, event: events.MouseDown) -> None:
-        self._mouse_down_offset = event.screen_offset
-
-    def on_click(self, event: events.Click) -> None:
-        if (
-            self._mouse_down_offset is not None
-            and event.screen_offset != self._mouse_down_offset
-        ):
-            return
-        widget = event.widget
-        contents = self.contents
-        if self.screen.get_selected_text():
-            return
-        if widget is None or widget.is_maximized:
-            return
-        if widget in contents.displayed_children:
-            self.cursor_offset = contents.displayed_children.index(widget)
-            self.refresh_block_cursor()
-            return
-        for parent in widget.ancestors:
-            if not isinstance(parent, Widget):
-                break
-            if (
-                parent is self or parent is contents
-            ) and widget in contents.displayed_children:
-                self.cursor_offset = contents.displayed_children.index(widget)
-                self.refresh_block_cursor()
-                break
-            if (
-                isinstance(parent, BlockProtocol)
-                and parent in contents.displayed_children
-            ):
-                self.cursor_offset = contents.displayed_children.index(parent)
-                parent.block_select(widget)
-                self.refresh_block_cursor()
-                break
-            widget = parent
-
-    async def post[WidgetType: Widget](
-        self, widget: WidgetType, *, anchor: bool = True, loading: bool = False
-    ) -> WidgetType:
-        if self._loading is not None:
-            await self._loading.remove()
-        if not self.contents.is_attached:
-            return widget
-        await self.contents.mount(widget)
-        widget.loading = loading
-        if anchor:
-            self.window.anchor()
-        return widget
-
-    async def new_terminal(self) -> Terminal:
-        """Create a new interactive Terminal.
-
-        Args:
-            width: Initial width of the terminal.
-            display: Initial display.
-
-        Returns:
-            A new (mounted) Terminal widget.
-        """
-        from toad.widgets.shell_terminal import ShellTerminal
-
-        if self._terminal is not None:
-            if self._terminal.state.buffer.is_blank:
-                await self._terminal.remove()
-            self._terminal.finalize()
-
-        terminal_width, terminal_height = self.get_terminal_dimensions()
-        terminal = ShellTerminal(
-            size=(terminal_width, terminal_height),
-            get_terminal_dimensions=self.get_terminal_dimensions,
-        )
-        terminal.display = False
-        terminal = await self.post(terminal)
-        self.add_focusable_terminal(terminal)
-        self.refresh_bindings()
-        return terminal
-
-    def get_terminal_dimensions(self) -> tuple[int, int]:
-        """Get the default dimensions of new terminals.
-
-        Returns:
-            Tuple of (WIDTH, HEIGHT)
-        """
-        terminal_width = max(
-            16,
-            (self.window.size.width - 2 - self.window.styles.scrollbar_size_vertical),
-        )
-        terminal_height = max(8, self.window.scrollable_content_region.height - 4)
-        return terminal_width, terminal_height
-
-    @property
-    def shell(self) -> Shell:
-        """A Shell instance."""
-
-        if self._shell is None or self._shell.is_finished:
-            system = platform.system()
-            if system == "Darwin":
-                shell_command = self.app.settings.get(
-                    "shell.macos.run", str, expand=False
-                )
-                shell_start = self.app.settings.get(
-                    "shell.macos.start", str, expand=False
-                )
-            else:
-                shell_command = self.app.settings.get(
-                    "shell.linux.run", str, expand=False
-                )
-                shell_start = self.app.settings.get(
-                    "shell.linux.start", str, expand=False
-                )
-
-            shell_directory = self.working_directory
-            self._shell = Shell(
-                self, shell_directory, shell=shell_command, start=shell_start
-            )
-            self._shell.start()
-        return self._shell
-
-    async def post_shell(self, command: str) -> None:
-        """Post a command to the shell.
-
-        Args:
-            command: Command to execute.
-        """
-        from toad.widgets.shell_result import ShellResult
-
-        if command.strip():
-            await self.post(ShellResult(command))
-            width, height = self.get_terminal_dimensions()
-            await self.shell.send(command, width, height)
-            self.post_message(messages.ProjectDirectoryUpdated())
-
-    def action_cursor_up(self) -> None:
-        if not self.contents.displayed_children or self.cursor_offset == 0:
-            # No children
-            return
-        if self.cursor_offset == -1:
-            # Start cursor at end
-            self.cursor_offset = len(self.contents.displayed_children) - 1
-            cursor_block = self.cursor_block
-            if isinstance(cursor_block, BlockProtocol):
-                cursor_block.block_cursor_clear()
-                cursor_block.block_cursor_up()
-        else:
-            cursor_block = self.cursor_block
-            if isinstance(cursor_block, BlockProtocol):
-                if cursor_block.block_cursor_up() is None:
-                    self.cursor_offset -= 1
-                    cursor_block = self.cursor_block
-                    if isinstance(cursor_block, BlockProtocol):
-                        cursor_block.block_cursor_clear()
-                        cursor_block.block_cursor_up()
-            else:
-                # Move cursor up
-                self.cursor_offset -= 1
-                cursor_block = self.cursor_block
-                if isinstance(cursor_block, BlockProtocol):
-                    cursor_block.block_cursor_clear()
-                    cursor_block.block_cursor_up()
-        self.refresh_block_cursor()
-
-    def action_cursor_down(self) -> None:
-        if not self.contents.displayed_children or self.cursor_offset == -1:
-            # No children, or no cursor
-            return
-
-        cursor_block = self.cursor_block
-        if isinstance(cursor_block, BlockProtocol):
-            if cursor_block.block_cursor_down() is None:
-                self.cursor_offset += 1
-                if self.cursor_offset >= len(self.contents.displayed_children):
-                    self.cursor_offset = -1
-                    self.refresh_block_cursor()
-                    return
-                cursor_block = self.cursor_block
-                if isinstance(cursor_block, BlockProtocol):
-                    cursor_block.block_cursor_clear()
-                    cursor_block.block_cursor_down()
-        else:
-            self.cursor_offset += 1
-            if self.cursor_offset >= len(self.contents.displayed_children):
-                self.cursor_offset = -1
-                self.refresh_block_cursor()
-                return
-            cursor_block = self.cursor_block
-            if isinstance(cursor_block, BlockProtocol):
-                cursor_block.block_cursor_clear()
-                cursor_block.block_cursor_down()
-        self.refresh_block_cursor()
-
-    @work
-    async def action_cancel(self) -> None:
-        if monotonic() - self._last_escape_time < 3:
-            if (agent := self.agent) is not None:
-                if await agent.cancel():
-                    self.flash("Turn cancelled", style="success")
-                else:
-                    self.flash("Agent declined to cancel. Please wait.", style="error")
-        else:
-            self.flash("Press [b]esc[/] again to cancel agent's turn")
-            self._last_escape_time = monotonic()
-
-    def focus_prompt(self) -> None:
+        # Clear current contents.
+        for child in list(self.contents.children):
+            await child.remove()
         self.cursor_offset = -1
         self.cursor.display = False
+
+        from toad.widgets.user_input import UserInput as UserInputWidget
+        from toad.widgets.agent_response import AgentResponse as AgentResponseWidget
+
+        # Rebuild a simple transcript: user prompts and agent messages.
+        for event_data in events:
+            role = event_data.get("role")
+            text = event_data.get("text") or ""
+            if not text:
+                continue
+            if role == "user":
+                await self.post(UserInputWidget(text), anchor=False)
+            elif role == "agent":
+                await self.post(AgentResponseWidget(text), anchor=False)
+
         self.window.scroll_end()
-        self.prompt.focus()
-
-    async def action_select_block(self) -> None:
-        if (block := self.get_cursor_block(Widget)) is None:
-            return
-
-        menu_options = [
-            MenuItem("[u]C[/]opy to clipboard", "copy_to_clipboard", "c"),
-            MenuItem("Co[u]p[/u]y to prompt", "copy_to_prompt", "p"),
-            MenuItem("Open as S[u]V[/]G", "export_to_svg", "v"),
-        ]
-
-        if block.allow_maximize:
-            menu_options.append(MenuItem("[u]M[/u]aximize", "maximize_block", "m"))
-
-        if isinstance(block, MenuProtocol):
-            menu_options.extend(block.get_block_menu())
-            menu = Menu(block, menu_options)
-        else:
-            menu = Menu(block, menu_options)
-
-        menu.offset = Offset(1, block.region.offset.y)
-        await self.mount(menu)
-        menu.focus()
-
-    def action_copy_to_clipboard(self) -> None:
-        block = self.get_cursor_block()
-        if isinstance(block, MenuProtocol):
-            text = block.get_block_content("clipboard")
-        elif isinstance(block, MarkdownFence):
-            text = block._content.plain
-        elif isinstance(block, MarkdownBlock):
-            text = block.source
-        else:
-            return
-        if text:
-            self.app.copy_to_clipboard(text)
-            self.flash("Copied to clipboard")
-
-    def action_copy_to_prompt(self) -> None:
-        block = self.get_cursor_block()
-        if isinstance(block, MenuProtocol):
-            text = block.get_block_content("prompt")
-        elif isinstance(block, MarkdownFence):
-            # Copy to prompt leaves MD formatting
-            text = block.source
-        elif isinstance(block, MarkdownBlock):
-            text = block.source
-        else:
-            return
-
-        if text:
-            self.prompt.append(text)
-            self.flash("Copied to prompt")
-            self.focus_prompt()
-
-    def action_maximize_block(self) -> None:
-        if (block := self.get_cursor_block()) is not None:
-            self.screen.maximize(block, container=False)
-            block.focus()
-
-    def action_export_to_svg(self) -> None:
-        block = self.get_cursor_block()
-        if block is None:
-            return
-        import platformdirs
-        from textual._compositor import Compositor
-        from textual._files import generate_datetime_filename
-
-        width, height = block.outer_size
-        compositor = Compositor()
-        compositor.reflow(block, block.outer_size)
-        render = compositor.render_full_update()
-
-        from rich.console import Console
-        import io
-        import os.path
-
-        console = Console(
-            width=width,
-            height=height,
-            file=io.StringIO(),
-            force_terminal=True,
-            color_system="truecolor",
-            record=True,
-            legacy_windows=False,
-            safe_box=False,
-        )
-        console.print(render)
-        path = platformdirs.user_pictures_dir()
-        svg_filename = generate_datetime_filename("Toad", ".svg", None)
-        svg_path = os.path.expanduser(os.path.join(path, svg_filename))
-        console.save_svg(svg_path)
-        import webbrowser
-
-        webbrowser.open(f"file:///{svg_path}")
-
-    async def action_mode_switcher(self) -> None:
-        self.prompt.mode_switcher.focus()
-
-    def refresh_block_cursor(self) -> None:
-        if (cursor_block := self.cursor_block_child) is not None:
-            self.window.focus()
-            self.cursor.visible = True
-            self.cursor.follow(cursor_block)
-            self.call_after_refresh(
-                self.window.scroll_to_center, cursor_block, immediate=True
-            )
-        else:
-            self.cursor.visible = False
-            self.window.anchor(False)
-            self.window.scroll_end(duration=2 / 10)
-            self.cursor.follow(None)
-            self.prompt.focus()
-        self.refresh_bindings()
+        self.flash("Session loaded. New messages will be appended here.", style="success")
 
     async def slash_command(self, text: str) -> bool:
         """Give Toad the opertunity to process slash commands.
