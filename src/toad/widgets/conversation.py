@@ -341,7 +341,7 @@ class Conversation(containers.Vertical):
         if (
             event.character is not None
             and event.is_printable
-            and event.character.isalnum()
+            and (event.character.isalnum() or event.character in "$/!")
             and self.window.has_focus
         ):
             self.prompt.focus()
