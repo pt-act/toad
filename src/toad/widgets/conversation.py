@@ -1184,7 +1184,7 @@ class Conversation(containers.Vertical):
     async def check_prune(self) -> None:
         """Check if a prune is required."""
         if self._require_check_prune:
-            await self.prune_window(3000, 4000)
+            await self.prune_window(2000, 3000)
             self._require_check_prune = False
 
     async def prune_window(self, low_mark: int, high_mark: int) -> None:
@@ -1199,7 +1199,6 @@ class Conversation(containers.Vertical):
 
         contents = self.contents
         height = contents.virtual_size.height
-
         if height <= high_mark:
             return
         prune_children: list[Widget] = []
