@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.18] - 2026-01-03
+
+### Fixed
+
+- Fixed footer setting
 
 ## [0.5.17] - 2026-01-03
 
@@ -118,6 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - First release. This document will be updated for subsequent releases.
 
+[0.5.18]: https://github.com/Textualize/textual/compare/v0.5.17...v0.5.18
 [0.5.17]: https://github.com/Textualize/textual/compare/v0.5.16...v0.5.17
 [0.5.16]: https://github.com/Textualize/textual/compare/v0.5.15...v0.5.16
 [0.5.15]: https://github.com/Textualize/textual/compare/v0.5.14...v0.5.15
