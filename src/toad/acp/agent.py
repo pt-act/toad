@@ -648,8 +648,7 @@ class Agent(AgentBase):
             response = api.session_cancel(self.session_id, {})
         try:
             await response.wait()
-        except jsonrpc.APIError as error:
-            self.log(f"error in acp_session_cancel; {error}")
+        except jsonrpc.APIError:
             # No-op if there is nothing to cancel
             return False
         return True
