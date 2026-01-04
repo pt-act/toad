@@ -1,3 +1,4 @@
+import asyncio
 import rich.repr
 
 from textual.message import Message
@@ -42,6 +43,12 @@ class DirectoryWatcher(FileSystemEventHandler):
         self._observer.schedule(self, str(self._path), recursive=True)
         self._observer.start()
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the watcher."""
-        self._observer.stop()
+
+        def close() -> None:
+            """Close the observer in a thread."""
+            self._observer.stop()
+            self._observer.join()
+
+        await asyncio.to_thread(close)

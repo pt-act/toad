@@ -606,7 +606,7 @@ class Conversation(containers.Vertical):
         if self.agent is not None:
             await self.agent.stop()
         if self._directory_watcher is not None:
-            self._directory_watcher.stop()
+            await self._directory_watcher.stop()
         if self._agent_data is not None and self.session_start_time is not None:
             session_time = monotonic() - self.session_start_time
             await self.app.capture_event(
