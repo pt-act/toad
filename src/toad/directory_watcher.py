@@ -20,7 +20,7 @@ class DirectoryChanged(Message):
 
 @rich.repr.auto
 class DirectoryWatcher(FileSystemEventHandler):
-    """Watch a directory for changes."""
+    """Watch for changes to a directory, ignoring purely file data changes."""
 
     def __init__(self, path: Path, widget: Widget) -> None:
         self._path = path
@@ -29,6 +29,10 @@ class DirectoryWatcher(FileSystemEventHandler):
         super().__init__()
 
     def on_any_event(self, event: FileSystemEvent) -> None:
+        """We want to respond to files or directories being added, removed, or removed.
+
+        We want to ignore any changes changes that are purely file data or metadata.
+        """
         if not isinstance(event, (DirModifiedEvent, FileModifiedEvent)):
             # We aren't interested in modifications. Only when files are potentially added / removed
             self._widget.post_message(DirectoryChanged())
@@ -49,6 +53,6 @@ class DirectoryWatcher(FileSystemEventHandler):
         def close() -> None:
             """Close the observer in a thread."""
             self._observer.stop()
-            self._observer.join()
+            self._observer.join(timeout=1)
 
         await asyncio.to_thread(close)
