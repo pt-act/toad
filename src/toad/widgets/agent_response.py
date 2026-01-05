@@ -27,7 +27,6 @@ class AgentResponse(Markdown):
         self.block_cursor_offset = -1
 
     def block_cursor_up(self) -> Widget | None:
-        self.log(self, self.children, self.block_cursor_offset)
         if self.block_cursor_offset == -1:
             if self.children:
                 self.block_cursor_offset = len(self.children) - 1

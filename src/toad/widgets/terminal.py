@@ -89,7 +89,6 @@ class Terminal(ScrollView, can_focus=True):
         self._finalized: bool = False
         self.current_directory: str | None = None
         self._alternate_screen: bool = False
-
         self._terminal_render_cache: LRUCache[tuple, Strip] = LRUCache(1024)
         self._write_to_stdin: Callable[[str], Awaitable] | None = None
 
@@ -106,7 +105,8 @@ class Terminal(ScrollView, can_focus=True):
     @property
     def height(self) -> int:
         """Height of the terminal."""
-        return self._height
+        height = self._height
+        return height
 
     @property
     def size(self) -> Size:
@@ -151,6 +151,7 @@ class Terminal(ScrollView, can_focus=True):
             self.refresh()
             self.blur()
             self.post_message(self.Finalized(self))
+            self.state.remove_trailing_blank_lines_from_scrollback()
 
     def allow_focus(self) -> bool:
         """Prohibit focus when the terminal is finalized and couldn't accept input."""
@@ -212,16 +213,19 @@ class Terminal(ScrollView, can_focus=True):
             width, height = self._get_terminal_dimensions()
         self.update_size(width, height)
 
-    async def write(self, text: str) -> bool:
+    async def write(self, text: str, hide_output: bool=False) -> bool:
         """Write sequences to the terminal.
 
         Args:
             text: Text with ANSI escape sequences.
+            hide_output: Do not update the buffers with visible text.
 
         Returns:
             `True` if the state visuals changed, `False` if no visual change.
         """
-        scrollback_delta, alternate_delta = await self.state.write(text)
+        scrollback_delta, alternate_delta = await self.state.write(
+            text, hide_output=hide_output
+        )
         self._update_from_state(scrollback_delta, alternate_delta)
         scrollback_changed = bool(scrollback_delta is None or scrollback_delta)
         alternate_changed = bool(alternate_delta is None or alternate_delta)
@@ -245,6 +249,7 @@ class Terminal(ScrollView, can_focus=True):
             self.finalize()
         width = self.state.width
         height = self.state.scrollback_buffer.height
+
         if self.state.alternate_screen:
             height += self.state.alternate_buffer.height
         self.virtual_size = Size(min(self.state.buffer.max_line_width, width), height)

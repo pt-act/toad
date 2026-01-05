@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from asyncio import Future
 import asyncio
+from contextlib import suppress
 from itertools import filterfalse
 from operator import attrgetter
 import platform
@@ -39,6 +40,7 @@ from toad.acp import protocol as acp_protocol
 from toad.acp.agent import Mode
 from toad.answer import Answer
 from toad.agent import AgentBase, AgentReady, AgentFail
+from toad.directory_watcher import DirectoryWatcher, DirectoryChanged
 from toad.history import History
 from toad.session import SessionStore, SessionEvent
 from toad.messages import SessionSelected
@@ -49,7 +51,7 @@ from toad.widgets.prompt import Prompt
 from toad.widgets.terminal import Terminal
 from toad.widgets.throbber import Throbber
 from toad.widgets.user_input import UserInput
-from toad.shell import Shell, CurrentWorkingDirectoryChanged, ShellFinished
+from toad.shell import Shell, CurrentWorkingDirectoryChanged
 from toad.slash_command import SlashCommand
 from toad.protocol import BlockProtocol, MenuProtocol, ExpandProtocol
 from toad.menus import MenuItem
@@ -83,6 +85,35 @@ If that fails, ask for help in [Discussions](https://github.com/batrachianai/toa
 https://github.com/batrachianai/toad/discussions
 """
 
+HELP_URL = "https://github.com/batrachianai/toad/discussions"
+
+STOP_REASON_MAX_TOKENS = f"""\
+## Maximum tokens reached
+
+$AGENT reported that your account is out of tokens.
+
+- You may need to purchase additional tokens, or fund your account.
+- If your account has tokens, try running any login or auth process again.
+
+If that fails, ask on {HELP_URL}
+"""
+
+STOP_REASON_MAX_TURN_REQUESTS = f"""\
+## Maximum model requests reached
+
+$AGENT has exceeded the maximum number of model requests in a single turn.
+
+Need help? Ask on {HELP_URL}
+"""
+
+STOP_REASON_REFUSAL = """\
+## Agent refusal
+ 
+$AGENT has refused to continue. 
+
+Need help? Ask on {HELP_URL}
+"""
+
 
 class Loading(Static):
     """Tiny widget to show loading indicator."""
@@ -104,20 +135,19 @@ class Cursor(Static):
     blink = var(True, toggle_class="-blink")
 
     def on_mount(self) -> None:
-        self.display = False
+        self.visible = False
         self.blink_timer = self.set_interval(0.5, self._update_blink, pause=True)
-        self.set_interval(0.4, self._update_follow)
 
     def _update_blink(self) -> None:
         if self.query_ancestor(Window).has_focus and self.screen.is_active:
             self.blink = not self.blink
         else:
-            self.blink = True
+            self.blink = False
 
     def watch_follow_widget(self, widget: Widget | None) -> None:
-        self.display = widget is not None
+        self.visible = widget is not None
 
-    def _update_follow(self) -> None:
+    def update_follow(self) -> None:
         if self.follow_widget and self.follow_widget.is_attached:
             self.styles.height = max(1, self.follow_widget.outer_size.height)
             follow_y = (
@@ -130,14 +160,14 @@ class Cursor(Static):
         self.follow_widget = widget
         self.blink = False
         if widget is None:
-            self.display = False
+            self.visible = False
             self.blink_timer.reset()
             self.blink_timer.pause()
         else:
-            self.display = True
+            self.visible = True
             self.blink_timer.reset()
             self.blink_timer.resume()
-            self._update_follow()
+            self.update_follow()
 
 
 class Contents(containers.VerticalGroup, can_focus=False):
@@ -152,6 +182,10 @@ class Contents(containers.VerticalGroup, can_focus=False):
             )
         return placements
 
+    def update_node_styles(self, animate: bool = True) -> None:
+        """Prevent expensive update of styles"""
+        # TODO: Add an option in Textual to do this without overriding a private method
+
 
 class ContentsGrid(containers.Grid):
     def pre_layout(self, layout) -> None:
@@ -162,6 +196,10 @@ class ContentsGrid(containers.Grid):
 class Window(containers.VerticalScroll):
     BINDING_GROUP_TITLE = "View"
     BINDINGS = [Binding("end", "screen.focus_prompt", "Prompt")]
+
+    def update_node_styles(self, animate: bool = True) -> None:
+        # TODO: Allow disabling in Textual
+        pass
 
 
 class Conversation(containers.Vertical):
@@ -297,6 +335,14 @@ class Conversation(containers.Vertical):
         self.session_store = SessionStore(self.project_data_path)
 
         self.session_start_time: float | None = None
+        self._terminal_count = 0
+        self._require_check_prune = False
+
+        self._turn_count = 0
+        self._shell_count = 0
+
+        self._directory_changed = False
+        self._directory_watcher: DirectoryWatcher | None = None
 
     @property
     def agent_title(self) -> str | None:
@@ -357,7 +403,7 @@ class Conversation(containers.Vertical):
         if (
             event.character is not None
             and event.is_printable
-            and event.character.isalnum()
+            and (event.character.isalnum() or event.character in "$/!")
             and self.window.has_focus
         ):
             self.prompt.focus()
@@ -383,6 +429,9 @@ class Conversation(containers.Vertical):
             status=Conversation.status,
         )
 
+    def update_node_styles(self, animate: bool = True) -> None:
+        self.prompt.update_node_styles(animate=animate)
+
     @property
     def _terminal(self) -> Terminal | None:
         """Return the last focusable terminal, if there is one.
@@ -395,8 +444,10 @@ class Conversation(containers.Vertical):
         self._focusable_terminals[:] = list(
             filterfalse(attrgetter("is_finalized"), self._focusable_terminals)
         )
-        if self._focusable_terminals:
-            return self._focusable_terminals[-1]
+
+        for terminal in reversed(self._focusable_terminals):
+            if terminal.display:
+                return terminal
         return None
 
     def add_focusable_terminal(self, terminal: Terminal) -> None:
@@ -408,6 +459,11 @@ class Conversation(containers.Vertical):
         if not terminal.is_finalized:
             self._focusable_terminals.append(terminal)
 
+    @on(DirectoryChanged)
+    def on_directory_changed(self, event: DirectoryChanged) -> None:
+        event.stop()
+        self._directory_changed = True
+
     @on(Terminal.Finalized)
     def on_terminal_finalized(self, event: Terminal.Finalized) -> None:
         """Terminal was finalized, so we can remove it from the list."""
@@ -416,6 +472,9 @@ class Conversation(containers.Vertical):
         except ValueError:
             pass
         self.prompt.project_directory_updated()
+        if self._directory_changed:
+            self._directory_changed = False
+            self.post_message(messages.ProjectDirectoryUpdated())
 
     @on(Terminal.AlternateScreenChanged)
     def on_terminal_alternate_screen_(
@@ -719,8 +778,41 @@ class Conversation(containers.Vertical):
             await self._loading.remove()
         self._agent_response = None
         self._agent_thought = None
-        self.post_message(messages.ProjectDirectoryUpdated())
-        self.prompt.project_directory_updated()
+
+        if self._directory_changed:
+            self._directory_changed = False
+            self.post_message(messages.ProjectDirectoryUpdated())
+            self.prompt.project_directory_updated()
+
+        self._turn_count += 1
+
+        if stop_reason != "end_turn":
+            from toad.widgets.markdown_note import MarkdownNote
+
+            agent = (self.agent_title or "agent").title()
+
+            if stop_reason == "max_tokens":
+                await self.post(
+                    MarkdownNote(
+                        STOP_REASON_MAX_TOKENS.replace("$AGENT", agent),
+                        classes="-stop-reason",
+                    )
+                )
+            elif stop_reason == "max_turn_requests":
+                await self.post(
+                    MarkdownNote(
+                        STOP_REASON_MAX_TURN_REQUESTS.replace("$AGENT", agent),
+                        classes="-stop-reason",
+                    )
+                )
+            elif stop_reason == "refusal":
+                await self.post(
+                    MarkdownNote(
+                        STOP_REASON_REFUSAL.replace("$AGENT", agent),
+                        classes="-stop-reason",
+                    )
+                )
+
         if self.app.settings.get("notifications.turn_over", bool):
             self.app.system_notify(
                 f"{self.agent_title} has finished working",
@@ -749,14 +841,7 @@ class Conversation(containers.Vertical):
     def on_current_working_directory_changed(
         self, event: CurrentWorkingDirectoryChanged
     ) -> None:
-        if self._terminal is not None:
-            self._terminal.finalize()
         self.working_directory = str(Path(event.path).resolve().absolute())
-
-    @on(ShellFinished)
-    def on_shell_finished(self) -> None:
-        if self._terminal is not None:
-            self._terminal.finalize()
 
     def watch_busy_count(self, busy: int) -> None:
         self.throbber.set_class(busy > 0, "-busy")
@@ -894,9 +979,10 @@ class Conversation(containers.Vertical):
         return terminal
 
     async def action_interrupt(self) -> None:
-        if self._terminal is not None:
+        terminal = self._terminal
+        if terminal is not None and not terminal.is_finalized:
             await self.shell.interrupt()
-            self._shell = None
+            # self._shell = None
             self.flash("Command interrupted", style="success")
         else:
             raise SkipAction()

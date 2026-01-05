@@ -149,7 +149,7 @@ class ToolCall(containers.VerticalGroup):
     @property
     def tool_call_header_content(self) -> Content:
         tool_call = self._tool_call
-        kind = tool_call.get("kind", "tool")
+        _kind = tool_call.get("kind", "tool")
         title = tool_call.get("title", "title")
         status = tool_call.get("status", "pending")
 
@@ -176,6 +176,14 @@ class ToolCall(containers.VerticalGroup):
             self.query_one(ToolCallHeader).update(self.tool_call_header_content)
         except NoMatches:
             pass
+        from toad.widgets.conversation import Conversation
+
+        try:
+            conversation = self.query_ancestor(Conversation)
+        except NoMatches:
+            pass
+        else:
+            self.call_after_refresh(conversation.cursor.update_follow)
 
     def watch_has_content(self) -> None:
         try:

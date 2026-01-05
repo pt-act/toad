@@ -158,9 +158,11 @@ class SettingsScreen(ModalScreen):
                             choices = setting.choices or []
                             with self.prevent(Select.Changed):
                                 select_choices = [
-                                    choice
-                                    if isinstance(choice, tuple)
-                                    else (choice, choice)
+                                    (
+                                        choice
+                                        if isinstance(choice, tuple)
+                                        else (choice, choice)
+                                    )
                                     for choice in choices
                                 ]
                                 choices_set = {choice[1] for choice in select_choices}
@@ -179,7 +181,9 @@ class SettingsScreen(ModalScreen):
         with containers.Vertical(id="contents"):
             with containers.VerticalGroup(classes="search-container"):
                 yield Input(id="search", placeholder="Search settings")
-            with lazy.Reveal(containers.VerticalScroll(can_focus=False)):
+            with lazy.Reveal(
+                containers.VerticalScroll(can_focus=False, id="settings-container")
+            ):
                 yield from compose(self, schema_to_widget("", schema.settings_map))
 
         yield Footer()

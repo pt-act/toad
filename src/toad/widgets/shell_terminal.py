@@ -11,5 +11,8 @@ class ShellTerminal(Terminal):
         return
         yield
 
+    def on_mount(self) -> None:
+        self.border_title = self.name
+
     def get_block_content(self, destination: str) -> str | None:
         return "\n".join(line.content.plain for line in self.state.buffer.lines)

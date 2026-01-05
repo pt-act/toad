@@ -14,6 +14,8 @@ SCHEMA: list[SchemaDict] = [
                 "type": "choices",
                 "default": "dracula",
                 "choices": [
+                    "atom-one-dark",
+                    "atom-one-light",
                     "catppuccin-latte",
                     "catppuccin-mocha",
                     "dracula",
@@ -40,7 +42,7 @@ SCHEMA: list[SchemaDict] = [
             },
             {
                 "key": "footer",
-                "title": "Enabled footer?",
+                "title": "Enable footer?",
                 "help": "Disable the footer if you want additional room.",
                 "type": "boolean",
                 "default": True,
@@ -259,7 +261,7 @@ SCHEMA: list[SchemaDict] = [
                         "title": "Shell command",
                         "type": "string",
                         "help": "Command used to launch your shell on macOS.\n[bold]Note:[/] Requires restart.",
-                        "default": "${SHELL:-/bin/sh} +o interactive",
+                        "default": "/bin/sh",
                     },
                     {
                         "key": "start",
@@ -281,7 +283,7 @@ SCHEMA: list[SchemaDict] = [
                         "title": "Shell command",
                         "type": "string",
                         "help": "The command used to launch your shell on Linux.\n[bold]Note:[/] Requires restart.",
-                        "default": "${SHELL:-/bin/sh}",
+                        "default": "/bin/sh",
                     },
                     {
                         "key": "start",

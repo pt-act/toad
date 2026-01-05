@@ -19,9 +19,14 @@ Run coding agents seamlessly under a single beautiful terminal UI, thanks to the
   </tr>
     
   </tbody>
-
   
 </table>
+
+## Video
+
+Watch a preview of the Toad User Interface:
+
+https://github.com/user-attachments/assets/ced36f4b-db02-4d29-8a0a-14ec64b22881
 
 ## Compatibility
 
@@ -31,13 +36,19 @@ Toad is a terminal application.
 Any terminal will work, although if you are using the default terminal on macOS you will get a much reduced experience.
 I recommend [Ghostty](https://ghostty.org/) which is fully featured and has amazing performance.
 
-## Clipboard
+### Clipboard
 
 On Linux, you may need to install `xclip` to enable clipboard support.
 
 ```
 sudo apt install xclip
 ```
+
+### Alternative shells
+
+I'd like Toad to run multiple shells, but there are some compatibility issues I need to work out first, so for the moment the default is to use `/bin/sh`.
+
+You can change the shell in settings. If you have any success, let me know.
 
 ## Getting Started
 
@@ -191,6 +202,8 @@ Toad was built by [Will McGugan](https://github.com/willmcgugan) and is currentl
 
 To discuss Toad, see the Discussions tab, or join the #toad channel on the [Textualize discord server](https://discord.gg/Enf6Z3qhVr).
 
+
+
 ### Roadmap
 Some planned features:
 - UI for MCP servers-P Expose model selection (waiting on ACP update)-C Richere)
@@ -204,6 +217,7 @@ This project is trialling a non-traditional approach to issues.
 Before an issue is created, there must be a post in Dicussions, approved by a Toad dev (Currently @willmcgugan).
 
 By allowing the discussions to happen in the Discussion tabs, issues can be reserved for actionable tasks with a clear description and goal.
+
 
 
 

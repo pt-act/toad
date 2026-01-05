@@ -2,6 +2,7 @@ from importlib.resources import files
 from datetime import datetime, timezone
 from functools import cached_property
 from pathlib import Path
+import platform
 import json
 from time import monotonic
 from typing import Any, ClassVar, TYPE_CHECKING
@@ -245,6 +246,8 @@ class ToadApp(App, inherit_bindings=False):
     last_ctrl_c_time = reactive(0.0)
     update_required: reactive[bool] = reactive(False)
 
+    HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (100, "-wide")]
+
     def __init__(
         self,
         agent_data: AgentData | None = None,
@@ -343,17 +346,10 @@ class ToadApp(App, inherit_bindings=False):
             event_name: Name of the event.
             **properties: Additional data associated with the event.
         """
-        if not self.settings.get("statistics.allow_collect", bool):
-            # User has disabled stats
-            return
 
         POSTHOG_API_KEY = "phc_mJWPV7GP3ar1i9vxBg2U8aiKsjNgVwum6F6ZggaD4ri"
         POSTHOG_HOST = "https://us.i.posthog.com"
         POSTHOG_EVENT_URL = f"{POSTHOG_HOST}/i/v0/e/"
-
-        import platform
-        import httpx
-
         timestamp = datetime.now(timezone.utc).isoformat()
 
         event_properties = {"toad_version": self.version} | properties
@@ -365,6 +361,12 @@ class ToadApp(App, inherit_bindings=False):
             "timestamp": timestamp,
             "os": platform.system(),
         }
+        if not self.settings.get("statistics.allow_collect", bool):
+            # User has disabled stats
+            return
+
+        import httpx
+
         try:
             async with httpx.AsyncClient() as client:
                 await client.post(POSTHOG_EVENT_URL, json=body_json)

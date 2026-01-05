@@ -130,6 +130,7 @@ class AgentModal(ModalScreen):
         command = commands[action]
 
         from toad.screens.action_modal import ActionModal
+        from toad.screens.command_edit_modal import CommandEditModal
 
         title = command["description"]
         agent_id = self._agent["identity"]
@@ -140,6 +141,12 @@ class AgentModal(ModalScreen):
         # Focus the select
         # It's unlikely the user wants to re-run the action
         self.action_select.focus()
+
+        action_command = await self.app.push_screen_wait(
+            CommandEditModal(action_command)
+        )
+        if action_command is None:
+            return
 
         return_code = await self.app.push_screen_wait(
             ActionModal(

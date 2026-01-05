@@ -73,6 +73,9 @@ class StatusLine(Label):
 
 class PromptContainer(containers.HorizontalGroup):
     def on_mouse_down(self, event: events.MouseUp) -> None:
+        for child in self.query("*"):
+            if child.has_focus:
+                return
         prompt_text_area = self.query_one(PromptTextArea)
         if not prompt_text_area.has_focus:
             prompt_text_area.focus()
@@ -231,7 +234,7 @@ class PromptTextArea(HighlightedTextArea):
         self.insert("\n")
 
     def action_submit(self) -> None:
-        if not self.agent_ready:
+        if not self.agent_ready and not self.shell_mode:
             self.app.bell()
             self.post_message(
                 messages.Flash(

@@ -797,7 +797,8 @@ class Buffer:
     @property
     def height(self) -> int:
         """Height of the buffer (number of folded lines)."""
-        return len(self.folded_lines)
+        height = len(self.folded_lines)
+        return height
 
     @property
     def last_line_no(self) -> int:
@@ -886,6 +887,15 @@ class Buffer:
         self.cursor_offset = 0
         self.max_line_width = 0
         self.updates = updates
+
+    def remove_last_line(self) -> None:
+        if not self.lines:
+            return
+        last_line_index = len(self.lines) - 1
+        del self.lines[-1]
+        del self.folded_lines[self.line_to_fold[last_line_index] :]
+        del self.line_to_fold[last_line_index]
+        self.updates += 1
 
 
 @dataclass
@@ -1097,6 +1107,19 @@ class TerminalState:
         """
         return "\x1b"
 
+    def remove_trailing_blank_lines_from_scrollback(self) -> None:
+        """Remove blank lines at the end of the scrollback buffer.
+
+        A line is considered blank if it is whitespace and has no color or style applied.
+
+        """
+        buffer = self.scrollback_buffer
+        while buffer.lines:
+            last_line_content = buffer.lines[-1].content
+            if last_line_content.spans or last_line_content.plain.rstrip():
+                break
+            buffer.remove_last_line()
+
     def _reflow(self) -> None:
         buffer = self.buffer
         if not buffer.lines:
@@ -1136,11 +1159,14 @@ class TerminalState:
             buffer.cursor_line = fold_cursor_line
             buffer.cursor_offset = fold_cursor_offset
 
-    async def write(self, text: str) -> tuple[set[int] | None, set[int] | None]:
+    async def write(
+        self, text: str, *, hide_output: bool = False
+    ) -> tuple[set[int] | None, set[int] | None]:
         """Write to the terminal.
 
         Args:
             text: Text to write.
+            hide_output: Hide visible output from buffers.
 
         Returns:
             A pair of deltas or `None for full refresh, for scrollback and alternate screen.
@@ -1152,8 +1178,13 @@ class TerminalState:
         alternate_buffer._updated_lines = set()
         scrollback_buffer._updated_lines = set()
         # Write sequences and update
-        for ansi_command in self._ansi_stream.feed(text):
-            await self._handle_ansi_command(ansi_command)
+        if hide_output:
+            for ansi_command in self._ansi_stream.feed(text):
+                if not isinstance(ansi_command, (ANSIContent, ANSICursor)):
+                    await self._handle_ansi_command(ansi_command)
+        else:
+            for ansi_command in self._ansi_stream.feed(text):
+                await self._handle_ansi_command(ansi_command)
 
         # Get deltas
         scrollback_updates = (

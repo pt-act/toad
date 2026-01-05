@@ -35,6 +35,8 @@ async def shell_read(
                             data += chunk
                         else:
                             break
-                    except OSError:
+                    except OSError as error:
+                        print(repr(error))
+
                         break
     return data
